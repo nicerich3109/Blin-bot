@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 """
 Заявки на вступление.
@@ -9,7 +10,21 @@
 - из модалки убраны поля "Планы после вступления" и "Откуда узнали о
   нас" — п. 2.2. Осталось три поля: никнейм, статик, OOC возраст;
 - в тикет-канале сразу висят кнопки "Принять"/"Отклонить" — п. 5.2.
+
+Изменения по ТЗ v1.2:
+- в модалку добавлены поля "Ваше OOC имя" и "В каких семьях были?"
+  (теперь всего 5 полей — максимум, который допускает Discord для
+  одной модалки);
+- добавлена проверка OOC возраста: допустимый диапазон 14-50 лет.
+  Если возраст вне диапазона, заявка автоматически отклоняется ещё
+  до создания тикет-канала, а заявителю (и только ему — сообщение
+  ephemeral) показывается предупреждение с просьбой переотправить
+  заявку с корректным возрастом;
+- при принятии заявки новый ник теперь оформляется через разделители
+  "|": "{ранг} |{Сервер}| {никнейм}".
 """
+
+import re
 
 import discord
 
@@ -23,17 +38,47 @@ class JoinModal(discord.ui.Modal):
     nickname = discord.ui.TextInput(label="Ваш никнейм", max_length=100)
     static = discord.ui.TextInput(label="Ваш статик #", max_length=20)
     ooc_age = discord.ui.TextInput(label="Ваш OOC возраст", max_length=10)
+    ooc_name = discord.ui.TextInput(label="Ваше OOC имя", max_length=100)
+    previous_families = discord.ui.TextInput(
+        label="В каких семьях были?",
+        style=discord.TextStyle.paragraph,
+        max_length=300,
+        required=False,
+    )
 
     def __init__(self, server: str):
         super().__init__(title=f"Заявка на вступление — {utils.SERVER_NAMES[server]}")
         self.server = server
 
     async def on_submit(self, interaction: discord.Interaction):
+        # П. проверки возраста ТЗ v1.2: допустимый диапазон OOC возраста —
+        # 14-50 лет. Если значение не число или выходит за диапазон,
+        # заявка отклоняется автоматически, тикет-канал даже не создаётся,
+        # а заявителю показывается ephemeral-сообщение (видно только ему).
+        age_raw = str(self.ooc_age.value).strip()
+        age_digits = re.sub(r"\D", "", age_raw)
+        age_value = int(age_digits) if age_digits else None
+
+        if age_value is None or not (14 <= age_value <= 50):
+            await interaction.response.send_message(
+                "❌ Заявка автоматически отклонена: указан некорректный OOC "
+                "возраст. Допустимый диапазон — от 14 до 50 лет. "
+                "Переотправьте заявку, указав корректный возраст.",
+                ephemeral=True,
+            )
+            logger.info(
+                "Заявка на вступление от %s автоматически отклонена — "
+                "некорректный OOC возраст: %r", interaction.user.id, age_raw,
+            )
+            return
+
         await interaction.response.defer(ephemeral=True, thinking=True)
         form = {
             "nickname": str(self.nickname.value),
             "static": str(self.static.value),
-            "ooc_age": str(self.ooc_age.value),
+            "ooc_age": age_raw,
+            "ooc_name": str(self.ooc_name.value),
+            "previous_families": str(self.previous_families.value) or "—",
         }
         await create_join_ticket(interaction, self.server, form)
 
@@ -101,7 +146,9 @@ async def create_join_ticket(interaction: discord.Interaction, server: str, form
     embed.add_field(name="Никнейм", value=form["nickname"], inline=False)
     embed.add_field(name="Статик #", value=form["static"], inline=True)
     embed.add_field(name="OOC возраст", value=form["ooc_age"], inline=True)
+    embed.add_field(name="OOC имя", value=form["ooc_name"], inline=True)
     embed.add_field(name="Сервер", value=utils.SERVER_NAMES[server], inline=True)
+    embed.add_field(name="В каких семьях были", value=form["previous_families"], inline=False)
     embed.set_footer(text=f"Discord: {interaction.user} ({interaction.user.id})")
 
     pings = f"{interaction.user.mention}"
