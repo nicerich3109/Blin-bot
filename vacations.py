@@ -23,6 +23,13 @@
 - п. 2.2: добавлена принудительная отправка домой раньше срока —
   force_remove_vacation(), используется командой /вынесение_из_отпуска
   из commands.py.
+
+Изменения по ТЗ v1.2:
+- нельзя больше подать заявку на отпуск не от своего лица: поле
+  "ID дискорда" убрано из модалки, бот автоматически подставляет
+  того, кто отправил заявку (interaction.user). В рассмотрении и
+  в логах ничего не изменилось — там по-прежнему указывается
+  участник, на которого оформлен отпуск.
 """
 
 from datetime import datetime
@@ -37,9 +44,6 @@ from ui_decision import RequestDecisionView
 
 
 class VacationModal(discord.ui.Modal, title="Заявка на отпуск"):
-    discord_id_input = discord.ui.TextInput(
-        label="ID дискорда", placeholder="Ваш ID или упоминание", max_length=50
-    )
     until_date_input = discord.ui.TextInput(
         label="До какого числа в отпуск", placeholder="31.10.26", max_length=10
     )
@@ -73,33 +77,14 @@ class VacationModal(discord.ui.Modal, title="Заявка на отпуск"):
             )
             return
 
-        target_id = utils.parse_discord_id(str(self.discord_id_input.value))
-        if target_id is None:
-            await interaction.response.send_message(
-                "Не удалось распознать ID/упоминание участника. Укажите ID или "
-                "@упоминание. Нажмите на кнопку «Подать заявку» ещё раз.",
-                ephemeral=True,
-            )
-            return
-
-        # П. 2.1 ТЗ v1.1.2: раньше ID/упоминание никак не проверялось, из-за
-        # чего можно было "тегнуть" человека, которого нет на сервере, или
-        # вовсе несуществующий ID. Теперь участник ищется на сервере, и без
-        # найденного участника заявка не создаётся.
-        target_member = await utils.get_member_safe(interaction.guild, target_id)
-        if target_member is None:
-            await interaction.response.send_message(
-                "Указанный участник не найден на этом сервере. Нельзя оформить "
-                "отпуск на человека, которого нет на сервере, или на несуществующий "
-                "ID. Проверьте ID/упоминание и нажмите «Подать заявку» ещё раз.",
-                ephemeral=True,
-            )
-            return
-
+        # ТЗ v1.2: заявку на отпуск можно оформить только на самого себя —
+        # ID больше не запрашивается в модалке, бот автоматически тегает
+        # того, кто отправил заявку. Проверка "состоит ли на сервере" не
+        # нужна: раз interaction пришло с этой гильдии, автор на ней есть.
         await interaction.response.defer(ephemeral=True, thinking=True)
         until_dt = datetime.combine(until_date, until_time)
         await create_vacation_request(
-            interaction, self.server, target_id, until_dt, str(self.reason_input.value)
+            interaction, self.server, interaction.user.id, until_dt, str(self.reason_input.value)
         )
 
 
