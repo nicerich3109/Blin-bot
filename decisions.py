@@ -11,8 +11,11 @@ utils.get_member_safe с запросом через API, а любые сбои
 логируются (см. logger_setup.py и bot.log).
 """
 
+import asyncio
+
 import discord
 
+import config
 import storage
 import utils
 from logger_setup import logger
@@ -138,10 +141,27 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
             result_embed.description = f"Причина: {reason}"
         await ticket_channel.send(embed=result_embed)
 
+        # Баг п. 1.2 ТЗ v1.1.2: раньше тикет-канал не удалялся ни при
+        # принятии, ни при отклонении заявки — он оставался навсегда
+        # (у заявителя просто отбиралось право писать). Теперь канал
+        # автоматически удаляется через небольшую задержку.
+        asyncio.create_task(_delete_ticket_channel_later(ticket_channel, number))
+
     message = f"Заявка `{number}` обработана: {result_label}."
     if role_warning:
         message += f" Внимание: {role_warning}. Подробности в bot.log."
     return True, message
+
+
+async def _delete_ticket_channel_later(channel: discord.TextChannel, number: str):
+    await asyncio.sleep(config.TICKET_DELETE_DELAY_SECONDS)
+    try:
+        await channel.delete(reason=f"Заявка {number} обработана — автоочистка тикет-канала")
+        logger.info("Тикет-канал заявки %s удалён", number)
+    except (discord.NotFound, discord.Forbidden):
+        logger.warning(
+            "Не удалось удалить тикет-канал заявки %s (уже удалён или нет прав)", number
+        )
 
 
 async def _finalize_ticket_message(channel, message_id, result_label, accepted):

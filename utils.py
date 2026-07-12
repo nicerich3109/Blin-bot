@@ -52,14 +52,14 @@ def parse_vacation_date(raw: str):
     return None
 
 
-_TIME_RE = re.compile(r"^([01]?\d|2[0-3]):(00|30)$")
+_TIME_RE = re.compile(r"^([01]?\d|2[0-3]):(00|10|20|30|40|50)$")
 
 
-def parse_half_hour_time(raw: str):
+def parse_ten_minute_time(raw: str):
     """
-    Парсит время вида "0:00", "0:30", "10:00", "10:30" — часы:минуты,
-    минуты обязательно кратны 30. Возвращает datetime.time или None,
-    если формат неверный / минуты не кратны получасу.
+    Парсит время вида "0:00", "0:10", "10:00", "10:30" — часы:минуты,
+    минуты обязательно кратны 10. Возвращает datetime.time или None,
+    если формат неверный / минуты не кратны 10.
     """
     raw = raw.strip()
     match = _TIME_RE.match(raw)

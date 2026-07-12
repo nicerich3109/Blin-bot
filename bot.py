@@ -19,11 +19,7 @@ from commands import register_commands
 
 intents = discord.Intents.default()
 intents.members = True  # нужно для управления ролями/никами
-intents.guilds = True
-intents.members = True  # Чтобы видеть участников
-intents.message_content = True  # Чтобы видеть сообщения
 
-WHITELISTED_GUILDS = [1372267300366979223]
 
 class BlinBot(commands.Bot):
     async def setup_hook(self):
@@ -81,12 +77,21 @@ async def on_ready():
     if not vacation_check_loop.is_running():
         vacation_check_loop.start()
 
-@bot.event
-async def on_guild_join(guild):
-    if guild.id not in WHITELISTED_GUILDS:
-        await asyncio.sleep(1)  # Ровно 1 секунда
-        await guild.leave()
-        print(f"Покинут {guild.name}")
+
+@tasks.loop(minutes=config.VACATION_CHECK_INTERVAL_MINUTES)
+async def vacation_check_loop():
+    for guild in bot.guilds:
+        try:
+            changed = await check_and_expire_vacations(guild)
+        except Exception:
+            logger.exception("Ошибка при проверке окончания отпусков на сервере %s", guild.id)
+            continue
+        for server in changed:
+            try:
+                await refresh_vacation_message(guild, server)
+            except discord.HTTPException:
+                logger.exception("Не удалось обновить список отпускников для %s", server)
+
 
 @vacation_check_loop.before_loop
 async def before_vacation_check_loop():

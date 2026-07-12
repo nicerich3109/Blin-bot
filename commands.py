@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-Слэш-команды /принять и /отклонить.
+Слэш-команды /принять, /отклонить и /вынесение_из_отпуска.
 
-По ТЗ v1.1 (п. 5.1) эти команды должны работать одинаково и для заявок
-на вступление, и для заявок на отпуск — тип заявки определяется
-автоматически по номеру (find_kind), а вся логика решения общая
-(decisions.decide_request), как и у кнопок в ui_decision.py.
+По ТЗ v1.1 (п. 5.1) команды /принять и /отклонить должны работать
+одинаково и для заявок на вступление, и для заявок на отпуск — тип
+заявки определяется автоматически по номеру (find_kind), а вся логика
+решения общая (decisions.decide_request), как и у кнопок в
+ui_decision.py.
+
+П. 2.2 ТЗ v1.1.2: /вынесение_из_отпуска принудительно выносит участника
+из отпуска раньше срока (сама логика — в vacations.force_remove_vacation).
+Параметр "участник" имеет тип discord.Member, поэтому Discord сам не даёт
+выбрать несуществующего человека или того, кого нет на сервере (п. 2.1).
 """
 
 import discord
@@ -14,6 +20,7 @@ from discord.ext import commands
 
 import decisions
 import storage
+import vacations
 
 
 async def _autocomplete_number(interaction: discord.Interaction, current: str):
@@ -61,5 +68,25 @@ def register_commands(bot: commands.Bot):
         await interaction.response.defer(ephemeral=True, thinking=True)
         ok, message = await decisions.decide_request(
             interaction.guild, interaction.user, kind, key, False, reason=причина
+        )
+        await interaction.followup.send(message, ephemeral=True)
+
+    @bot.tree.command(
+        name="вынесение_из_отпуска",
+        description="Принудительно вынести участника из отпуска раньше срока",
+    )
+    @app_commands.describe(
+        участник="Кого вынести из отпуска (тег/выбор участника сервера)",
+        причина="Причина принудительного выноса",
+    )
+    async def cmd_force_remove_vacation(
+        interaction: discord.Interaction, участник: discord.Member, причина: str
+    ):
+        if interaction.guild is None:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        ok, message = await vacations.force_remove_vacation(
+            interaction.guild, interaction.user, участник, причина
         )
         await interaction.followup.send(message, ephemeral=True)
