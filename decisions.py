@@ -9,6 +9,12 @@
 при отсутствии в кэше поиск молча проваливался. Теперь используется
 utils.get_member_safe с запросом через API, а любые сбои подробно
 логируются (см. logger_setup.py и bot.log).
+
+Изменения по ТЗ v1.2:
+- ник, выдаваемый при принятии заявки на вступление, теперь оформлен
+  через разделители "|": "{ранг} |{Сервер}| {никнейм}";
+- в лог заявки на вступление добавлены поля "OOC имя" и "В каких
+  семьях были" (заполняются из расширенной модалки в applications.py).
 """
 
 import asyncio
@@ -82,7 +88,8 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
     # --- Действия по заявителю при одобрении ---
     if accepted and applicant is not None:
         first_word = app["nickname"].strip().split(" ")[0] if app["nickname"].strip() else applicant.display_name
-        new_nick = f"New Blin {server} {first_word}"
+        # Формат ника по ТЗ v1.2: "ранг |Сервер| никнейм".
+        new_nick = f"New Blin |{server}| {first_word}"
         try:
             await applicant.edit(nick=new_nick, reason=f"Заявка {number} одобрена")
         except discord.Forbidden:
@@ -109,7 +116,11 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
     log_embed.add_field(name="Никнейм", value=app["nickname"], inline=False)
     log_embed.add_field(name="Статик #", value=app["static"], inline=True)
     log_embed.add_field(name="OOC возраст", value=app["ooc_age"], inline=True)
+    log_embed.add_field(name="OOC имя", value=app.get("ooc_name", "—"), inline=True)
     log_embed.add_field(name="Сервер", value=utils.SERVER_NAMES[server], inline=True)
+    log_embed.add_field(
+        name="В каких семьях были", value=app.get("previous_families", "—"), inline=False
+    )
     log_embed.add_field(
         name="Заявитель", value=f"<@{app['applicant_id']}> ({app['applicant_id']})", inline=False
     )
