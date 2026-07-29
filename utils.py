@@ -7,6 +7,7 @@
 
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import discord
 
@@ -53,6 +54,32 @@ def parse_vacation_date(raw: str):
 
 
 _TIME_RE = re.compile(r"^([01]?\d|2[0-3]):(00|10|20|30|40|50)$")
+
+
+def vacation_timezone() -> ZoneInfo:
+    """Часовой пояс для дат/времени отпуска (см. config.VACATION_TIMEZONE)."""
+    return ZoneInfo(config.VACATION_TIMEZONE)
+
+
+def now() -> datetime:
+    """Текущее время в часовом поясе отпусков."""
+    return datetime.now(vacation_timezone())
+
+
+def combine_vacation_datetime(until_date, until_time) -> datetime:
+    """Собирает aware datetime окончания отпуска в локальной зоне."""
+    return datetime.combine(until_date, until_time, tzinfo=vacation_timezone())
+
+
+def parse_stored_datetime(iso_value: str) -> datetime:
+    """
+    Разбирает until_datetime из хранилища. Старые записи без tzinfo
+    считаются указанными в VACATION_TIMEZONE.
+    """
+    dt = datetime.fromisoformat(iso_value)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=vacation_timezone())
+    return dt
 
 
 def parse_ten_minute_time(raw: str):

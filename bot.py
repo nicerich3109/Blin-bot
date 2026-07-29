@@ -2,11 +2,11 @@
 """
 Точка входа. Собирает все модули воедино: регистрирует персистентные
 кнопки, слэш-команды, публикует/обновляет информационные сообщения и
-запускает фоновую проверку окончания отпусков.
+восстанавливает таймеры окончания отпусков.
 """
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 
 import config
 import storage
@@ -14,7 +14,12 @@ import utils
 from logger_setup import logger
 from ui_decision import RequestDecisionView
 from applications import JoinInfoView
-from vacations import VacationInfoView, refresh_vacation_message, check_and_expire_vacations
+from vacations import (
+    VacationInfoView,
+    refresh_vacation_message,
+    check_and_expire_vacations,
+    restore_vacation_schedules,
+)
 from commands import register_commands
 
 intents = discord.Intents.default()
@@ -74,28 +79,17 @@ async def on_ready():
             except discord.HTTPException:
                 logger.exception("Не удалось обновить сообщение отпуска для %s", server)
 
-    if not vacation_check_loop.is_running():
-        vacation_check_loop.start()
-
-
-@tasks.loop(minutes=config.VACATION_CHECK_INTERVAL_MINUTES)
-async def vacation_check_loop():
-    for guild in bot.guilds:
+        # При старте закрываем уже просроченные отпуска и восстанавливаем таймеры.
         try:
             changed = await check_and_expire_vacations(guild)
+            for server in changed:
+                try:
+                    await refresh_vacation_message(guild, server)
+                except discord.HTTPException:
+                    logger.exception("Не удалось обновить список отпускников для %s", server)
+            await restore_vacation_schedules(guild)
         except Exception:
-            logger.exception("Ошибка при проверке окончания отпусков на сервере %s", guild.id)
-            continue
-        for server in changed:
-            try:
-                await refresh_vacation_message(guild, server)
-            except discord.HTTPException:
-                logger.exception("Не удалось обновить список отпускников для %s", server)
-
-
-@vacation_check_loop.before_loop
-async def before_vacation_check_loop():
-    await bot.wait_until_ready()
+            logger.exception("Ошибка при инициализации таймеров отпусков на сервере %s", guild.id)
 
 
 def main():

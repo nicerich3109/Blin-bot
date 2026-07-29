@@ -9,9 +9,9 @@
   к дате, с шагом в 10 минут ("0:00", "0:10", "10:00", "10:30"...) — п. 6.1;
 - в сообщении в канале логов сразу есть кнопки "Принять"/"Отклонить",
   отказ теперь тоже открывает модалку с причиной — п. 5.2, 5.3;
-- список "сейчас в отпуске" и снятие роли по истечении срока теперь
-  проверяются раз в config.VACATION_CHECK_INTERVAL_MINUTES минут
-  (см. обоснование интервала в config.py) — п. 6.2.
+- список "сейчас в отпуске" и снятие роли по истечении срока
+  обрабатываются таймером на момент окончания (после одобрения заявки
+  и при перезапуске бота) плюс проверка при старте — п. 6.2.
 
 Изменения по ТЗ v1.1.2:
 - бага п. 1.3: участник, покинувший сервер до окончания отпуска, больше
@@ -23,16 +23,10 @@
 - п. 2.2: добавлена принудительная отправка домой раньше срока —
   force_remove_vacation(), используется командой /вынесение_из_отпуска
   из commands.py.
-
-Изменения по ТЗ v1.2:
-- нельзя больше подать заявку на отпуск не от своего лица: поле
-  "ID дискорда" убрано из модалки, бот автоматически подставляет
-  того, кто отправил заявку (interaction.user). В рассмотрении и
-  в логах ничего не изменилось — там по-прежнему указывается
-  участник, на которого оформлен отпуск.
 """
 
 from datetime import datetime
+import asyncio
 
 import discord
 
@@ -44,6 +38,9 @@ from ui_decision import RequestDecisionView
 
 
 class VacationModal(discord.ui.Modal, title="Заявка на отпуск"):
+    discord_id_input = discord.ui.TextInput(
+        label="ID дискорда", placeholder="Ваш ID или упоминание", max_length=50
+    )
     until_date_input = discord.ui.TextInput(
         label="До какого числа в отпуск", placeholder="31.10.26", max_length=10
     )
@@ -77,14 +74,33 @@ class VacationModal(discord.ui.Modal, title="Заявка на отпуск"):
             )
             return
 
-        # ТЗ v1.2: заявку на отпуск можно оформить только на самого себя —
-        # ID больше не запрашивается в модалке, бот автоматически тегает
-        # того, кто отправил заявку. Проверка "состоит ли на сервере" не
-        # нужна: раз interaction пришло с этой гильдии, автор на ней есть.
+        target_id = utils.parse_discord_id(str(self.discord_id_input.value))
+        if target_id is None:
+            await interaction.response.send_message(
+                "Не удалось распознать ID/упоминание участника. Укажите ID или "
+                "@упоминание. Нажмите на кнопку «Подать заявку» ещё раз.",
+                ephemeral=True,
+            )
+            return
+
+        # П. 2.1 ТЗ v1.1.2: раньше ID/упоминание никак не проверялось, из-за
+        # чего можно было "тегнуть" человека, которого нет на сервере, или
+        # вовсе несуществующий ID. Теперь участник ищется на сервере, и без
+        # найденного участника заявка не создаётся.
+        target_member = await utils.get_member_safe(interaction.guild, target_id)
+        if target_member is None:
+            await interaction.response.send_message(
+                "Указанный участник не найден на этом сервере. Нельзя оформить "
+                "отпуск на человека, которого нет на сервере, или на несуществующий "
+                "ID. Проверьте ID/упоминание и нажмите «Подать заявку» ещё раз.",
+                ephemeral=True,
+            )
+            return
+
         await interaction.response.defer(ephemeral=True, thinking=True)
-        until_dt = datetime.combine(until_date, until_time)
+        until_dt = utils.combine_vacation_datetime(until_date, until_time)
         await create_vacation_request(
-            interaction, self.server, interaction.user.id, until_dt, str(self.reason_input.value)
+            interaction, self.server, target_id, until_dt, str(self.reason_input.value)
         )
 
 
@@ -166,7 +182,7 @@ async def build_vacation_embeds(guild: discord.Guild, server: str):
             continue
         member_id = vac.get("target_id")
         mention = f"<@{member_id}>" if member_id else "неизвестно"
-        until_dt = datetime.fromisoformat(vac["until_datetime"])
+        until_dt = utils.parse_stored_datetime(vac["until_datetime"])
         lines.append(f"• {mention} — до **{until_dt.strftime('%d.%m.%Y %H:%M')}**")
 
     list_embed.description = "\n".join(lines) if lines else "Сейчас никто не в отпуске."
@@ -189,14 +205,120 @@ async def refresh_vacation_message(guild: discord.Guild, server: str):
     await storage.persist()
 
 
-# ============================ ФОНОВАЯ ПРОВЕРКА =============================
+# ============================ ПЛАНИРОВЩИК ОКОНЧАНИЯ ======================
+
+_scheduled_expiry_tasks: dict[str, asyncio.Task] = {}
+
+
+def cancel_vacation_expiry(vac_id: str) -> None:
+    """Отменяет запланированное автоматическое окончание отпуска."""
+    task = _scheduled_expiry_tasks.pop(vac_id, None)
+    if task and not task.done():
+        task.cancel()
+
+
+async def _expire_vacation_record(guild: discord.Guild, vac_id: str, vac: dict) -> bool:
+    """
+    Закрывает одну активную заявку на отпуск: снимает роль (если участник
+    ещё на сервере) и помечает role_removed. Возвращает True, если запись
+    была изменена.
+    """
+    if vac.get("status") != "accepted" or vac.get("role_removed"):
+        return False
+
+    target_id = vac.get("target_id")
+    target = await utils.get_member_safe(guild, target_id)
+    left_server = bool(target_id) and target is None
+
+    role = guild.get_role(utils.VACATION_ROLES.get(vac["server"]))
+    if target and role and role in target.roles:
+        try:
+            await target.remove_roles(role, reason=f"Отпуск {vac_id} закончился")
+            logger.info("Роль отпуска снята с участника %s (заявка %s)", target.id, vac_id)
+        except discord.Forbidden:
+            logger.error(
+                "Нет прав снять роль %s с участника %s (заявка %s)", role.id, target.id, vac_id
+            )
+    elif left_server:
+        logger.info(
+            "Участник %s покинул сервер во время отпуска (заявка %s) — запись закрыта",
+            target_id, vac_id,
+        )
+    elif target is None:
+        logger.warning("Участник по заявке %s не найден при снятии роли отпуска", vac_id)
+
+    vac["role_removed"] = True
+    return True
+
+
+async def schedule_vacation_expiry(guild: discord.Guild, vac_id: str) -> None:
+    """
+    Планирует автоматическое окончание отпуска ровно на until_datetime.
+    Если срок уже прошёл — закрывает заявку сразу.
+    """
+    vac = storage.DATA["vacations"].get(vac_id)
+    if vac is None or vac.get("status") != "accepted" or vac.get("role_removed"):
+        return
+
+    try:
+        until_dt = utils.parse_stored_datetime(vac["until_datetime"])
+    except (KeyError, ValueError):
+        logger.warning("Не удалось разобрать until_datetime для заявки %s — таймер не запущен", vac_id)
+        return
+
+    cancel_vacation_expiry(vac_id)
+
+    now = utils.now()
+    if now >= until_dt:
+        logger.info(
+            "Отпуск %s уже истёк (до %s, сейчас %s) — закрываю сразу",
+            vac_id, until_dt.strftime("%d.%m.%Y %H:%M"), now.strftime("%d.%m.%Y %H:%M"),
+        )
+        if await _expire_vacation_record(guild, vac_id, vac):
+            await storage.persist()
+            await refresh_vacation_message(guild, vac["server"])
+        return
+
+    delay = (until_dt - now).total_seconds()
+    logger.info(
+        "Запланировано окончание отпуска %s через %.0f сек (в %s %s)",
+        vac_id, delay, until_dt.strftime("%d.%m.%Y %H:%M"), config.VACATION_TIMEZONE,
+    )
+
+    async def _wait_and_expire():
+        try:
+            await asyncio.sleep(delay)
+            current = storage.DATA["vacations"].get(vac_id)
+            if current is None or current.get("role_removed"):
+                return
+            if await _expire_vacation_record(guild, vac_id, current):
+                await storage.persist()
+                await refresh_vacation_message(guild, current["server"])
+                logger.info("Отпуск %s автоматически закрыт по таймеру", vac_id)
+        except asyncio.CancelledError:
+            logger.debug("Таймер окончания отпуска %s отменён", vac_id)
+        finally:
+            _scheduled_expiry_tasks.pop(vac_id, None)
+
+    _scheduled_expiry_tasks[vac_id] = asyncio.create_task(_wait_and_expire())
+
+
+async def restore_vacation_schedules(guild: discord.Guild) -> None:
+    """Восстанавливает таймеры для всех активных отпусков после перезапуска бота."""
+    for vac_id, vac in storage.DATA["vacations"].items():
+        if vac.get("status") == "accepted" and not vac.get("role_removed"):
+            await schedule_vacation_expiry(guild, vac_id)
+
+
+# ============================ ПРОВЕРКА ПРИ СТАРТЕ ==========================
 
 async def check_and_expire_vacations(guild: discord.Guild):
     """
     Проверяет все принятые заявки на отпуск этого сервера (гильдии) на
     предмет истечения срока и снимает роль там, где срок прошёл.
-    Возвращает множество серверов (DN/PHX), для которых список изменился
-    и его стоит обновить.
+    Вызывается при запуске бота; для активных отпусков дальше работает
+    schedule_vacation_expiry().
+    Возвращает множество серверов (DN/PHX), для которых список изменился.
 
     Баг п. 1.3 ТЗ v1.1.2: раньше запись закрывалась только по истечении
     указанной даты/времени. Если участник покидал сервер до окончания
@@ -206,7 +328,7 @@ async def check_and_expire_vacations(guild: discord.Guild):
     закрывается сразу же, как только выяснилось, что участника больше
     нет на сервере — не дожидаясь даты.
     """
-    now = datetime.now()
+    now = utils.now()
     changed_servers = set()
 
     for vac_id, vac in storage.DATA["vacations"].items():
@@ -219,7 +341,7 @@ async def check_and_expire_vacations(guild: discord.Guild):
 
         until_dt = None
         try:
-            until_dt = datetime.fromisoformat(vac["until_datetime"])
+            until_dt = utils.parse_stored_datetime(vac["until_datetime"])
         except (KeyError, ValueError):
             logger.warning("Не удалось разобрать until_datetime для заявки %s", vac_id)
 
@@ -227,25 +349,8 @@ async def check_and_expire_vacations(guild: discord.Guild):
         if not left_server and not expired:
             continue
 
-        role = guild.get_role(utils.VACATION_ROLES.get(vac["server"]))
-        if target and role and role in target.roles:
-            try:
-                await target.remove_roles(role, reason=f"Отпуск {vac_id} закончился")
-                logger.info("Роль отпуска снята с участника %s (заявка %s)", target.id, vac_id)
-            except discord.Forbidden:
-                logger.error(
-                    "Нет прав снять роль %s с участника %s (заявка %s)", role.id, target.id, vac_id
-                )
-        elif left_server:
-            logger.info(
-                "Участник %s покинул сервер во время отпуска (заявка %s) — запись закрыта",
-                target_id, vac_id,
-            )
-        elif target is None:
-            logger.warning("Участник по заявке %s не найден при снятии роли отпуска", vac_id)
-
-        vac["role_removed"] = True
-        changed_servers.add(vac["server"])
+        if await _expire_vacation_record(guild, vac_id, vac):
+            changed_servers.add(vac["server"])
 
     if changed_servers:
         await storage.persist()
@@ -298,6 +403,7 @@ async def force_remove_vacation(guild: discord.Guild, staff_member: discord.Memb
     active_vac["role_removed"] = True
     active_vac["force_removed_by"] = staff_member.id
     active_vac["force_removed_reason"] = reason
+    cancel_vacation_expiry(active_id)
     await storage.persist()
 
     logger.info(
