@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 """
 Заявки на вступление.
@@ -28,6 +27,7 @@ import re
 
 import discord
 
+import config
 import storage
 import utils
 from logger_setup import logger
@@ -105,10 +105,46 @@ class JoinInfoView(discord.ui.View):
         self.add_item(phoenix_btn)
 
     async def on_denver(self, interaction: discord.Interaction):
+        remaining = _cooldown_remaining(interaction.user.id)
+        if remaining > 0:
+            await interaction.response.send_message(
+                f"⏳ Подавать заявку можно не чаще раза в "
+                f"{config.JOIN_APPLICATION_COOLDOWN_SECONDS // 60} мин. "
+                f"Попробуйте снова через {int(remaining)} сек.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.send_modal(JoinModal("DN"))
 
     async def on_phoenix(self, interaction: discord.Interaction):
+        remaining = _cooldown_remaining(interaction.user.id)
+        if remaining > 0:
+            await interaction.response.send_message(
+                f"⏳ Подавать заявку можно не чаще раза в "
+                f"{config.JOIN_APPLICATION_COOLDOWN_SECONDS // 60} мин. "
+                f"Попробуйте снова через {int(remaining)} сек.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.send_modal(JoinModal("PHX"))
+
+
+def _cooldown_remaining(user_id) -> float:
+    """
+    Сколько секунд осталось до того, как участник сможет снова подать
+    заявку на вступление (п. "КД на заявки" — 2 минуты между заявками).
+    Возвращает 0, если кулдауна нет или он уже прошёл.
+    """
+    last_iso = storage.DATA["join_cooldowns"].get(str(user_id))
+    if not last_iso:
+        return 0
+    try:
+        last_dt = utils.parse_stored_datetime(last_iso)
+    except ValueError:
+        return 0
+    elapsed = (utils.now() - last_dt).total_seconds()
+    remaining = config.JOIN_APPLICATION_COOLDOWN_SECONDS - elapsed
+    return max(0.0, remaining)
 
 
 async def create_join_ticket(interaction: discord.Interaction, server: str, form: dict):
@@ -168,6 +204,7 @@ async def create_join_ticket(interaction: discord.Interaction, server: str, form
         "status": "pending",
         **form,
     }
+    storage.DATA["join_cooldowns"][str(interaction.user.id)] = utils.now().isoformat()
     await storage.persist()
 
     logger.info("Создана заявка на вступление %s от %s", number, interaction.user.id)
@@ -177,3 +214,84 @@ async def create_join_ticket(interaction: discord.Interaction, server: str, form
         f"в канале {channel.mention}",
         ephemeral=True,
     )
+
+
+# ================================ ОБЗВОН ===================================
+
+class ObzvonChannelSelectView(discord.ui.View):
+    """
+    Список каналов обзвона для сервера заявки (два варианта на выбор).
+    Показывается сотруднику ephemeral-сообщением после нажатия кнопки
+    "Обзвон" на заявке. После выбора заявителю выдаётся роль обзвона и
+    приходит уведомление с каналом, в который нужно зайти.
+    """
+
+    def __init__(self, number: str, server: str):
+        super().__init__(timeout=300)
+        self.number = number
+        self.server = server
+
+        options = [
+            discord.SelectOption(label=f"Обзвон {i + 1}", value=str(channel_id))
+            for i, channel_id in enumerate(utils.OBZVON_CHANNELS[server])
+        ]
+        select = discord.ui.Select(placeholder="Канал обзвона", options=options)
+        select.callback = self.on_select
+        self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction):
+        channel_id = int(interaction.data["values"][0])
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        ok, message = await call_to_obzvon(interaction.guild, self.number, channel_id)
+        await interaction.followup.send(message, ephemeral=True)
+
+
+async def call_to_obzvon(guild: discord.Guild, number: str, channel_id: int):
+    """
+    Вызывает заявителя на обзвон: выдаёт роль обзвона его сервера
+    (открывает видимость канала обзвона) и уведомляет его в тикет-канале.
+    Возвращает (ok: bool, message: str) для показа сотруднику, который
+    выполнил выбор канала.
+    """
+    app = storage.DATA["applications"].get(number)
+    if app is None:
+        return False, f"Заявка `{number}` не найдена."
+    if app["status"] != "pending":
+        return False, f"Заявка `{number}` уже обработана (статус: {app['status']})."
+
+    server = app["server"]
+    applicant = await utils.get_member_safe(guild, app["applicant_id"])
+    if applicant is None:
+        return False, "Заявитель не найден на сервере — не удалось вызвать на обзвон."
+
+    call_channel = guild.get_channel(channel_id)
+    if call_channel is None:
+        logger.error("Канал обзвона %s не найден на сервере %s", channel_id, guild.id)
+        return False, "Канал обзвона не найден (проверьте ID в config.py)."
+
+    role = guild.get_role(utils.OBZVON_ROLES.get(server))
+    if role is None:
+        logger.error("Роль обзвона для %s не найдена (guild %s)", server, guild.id)
+        return False, "Роль обзвона не найдена (проверьте ID в config.py)."
+
+    try:
+        await applicant.add_roles(role, reason=f"Вызван на обзвон по заявке {number}")
+    except discord.Forbidden:
+        logger.error("Нет прав выдать роль обзвона %s участнику %s (заявка %s)", role.id, applicant.id, number)
+        return False, "Не удалось выдать роль обзвона (проверьте иерархию ролей бота)."
+
+    app["obzvon_channel_id"] = channel_id
+    await storage.persist()
+
+    logger.info(
+        "Заявитель %s (заявка %s) вызван на обзвон в канал %s", applicant.id, number, channel_id,
+    )
+
+    ticket_channel = guild.get_channel(app["channel_id"])
+    if ticket_channel:
+        await ticket_channel.send(
+            f"📞 {applicant.mention}, вас вызвали на обзвон! "
+            f"Пожалуйста, зайдите в канал {call_channel.mention}."
+        )
+
+    return True, f"Заявитель вызван на обзвон в {call_channel.mention}, роль обзвона выдана."
