@@ -82,7 +82,7 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
     # --- Действия по заявителю при одобрении ---
     if accepted and applicant is not None:
         first_word = app["nickname"].strip().split(" ")[0] if app["nickname"].strip() else applicant.display_name
-        new_nick = f"New Blin {server} {first_word}"
+        new_nick = f"New {server} {first_word}"
         try:
             await applicant.edit(nick=new_nick, reason=f"Заявка {number} одобрена")
         except discord.Forbidden:
@@ -99,6 +99,20 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
             except discord.Forbidden:
                 logger.error("Нет прав выдать роль %s участнику %s (заявка %s)", role.id, applicant.id, number)
                 role_warning = "не удалось выдать роль (проверьте иерархию ролей бота)"
+
+    # --- Снимаем роль обзвона (если выдавалась) — заявка обработана, доступ
+    # к каналу обзвона больше не нужен независимо от решения (п. "Обзвон").
+    if applicant is not None:
+        obzvon_role_id = utils.OBZVON_ROLES.get(server)
+        obzvon_role = guild.get_role(obzvon_role_id) if obzvon_role_id else None
+        if obzvon_role and obzvon_role in applicant.roles:
+            try:
+                await applicant.remove_roles(obzvon_role, reason=f"Заявка {number} обработана")
+            except discord.Forbidden:
+                logger.error(
+                    "Нет прав снять роль обзвона %s с участника %s (заявка %s)",
+                    obzvon_role.id, applicant.id, number,
+                )
 
     # --- Логи ---
     logs_channel = guild.get_channel(utils.LOGS_CHANNELS[server])
