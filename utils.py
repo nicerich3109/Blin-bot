@@ -25,6 +25,8 @@ LOGS_CHANNELS = {"DN": config.LOGS_CHANNEL_DN, "PHX": config.LOGS_CHANNEL_PHX}
 NEW_MEMBER_ROLES = {"DN": config.NEW_MEMBER_DN, "PHX": config.NEW_MEMBER_PHX}
 VACATION_CHANNELS = {"DN": config.VACATION_CHANNEL_DN, "PHX": config.VACATION_CHANNEL_PHX}
 VACATION_ROLES = {"DN": config.VACATION_ROLE_DN, "PHX": config.VACATION_ROLE_PHX}
+OBZVON_ROLES = {"DN": config.OBZVON_ROLE_DN, "PHX": config.OBZVON_ROLE_PHX}
+OBZVON_CHANNELS = {"DN": config.OBZVON_CHANNELS_DN, "PHX": config.OBZVON_CHANNELS_PHX}
 
 
 # ------------------------------- ПАРСИНГ ---------------------------------
