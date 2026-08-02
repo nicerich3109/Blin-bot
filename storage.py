@@ -19,6 +19,7 @@ DEFAULT_DATA = {
     "applications": {},        # номер заявки ("DN-001") -> dict
     "vacations": {},            # id заявки на отпуск ("DN-VAC-001") -> dict
     "persistent_messages": {},  # ключ -> message_id
+    "join_cooldowns": {},       # user_id (str) -> ISO-время последней поданной заявки
 }
 
 
