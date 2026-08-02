@@ -25,14 +25,27 @@ class RequestDecisionView(discord.ui.View):
             style=discord.ButtonStyle.success,
             custom_id=f"decision_accept_{kind}_{key}",
         )
+        accept_btn.callback = self.on_accept
+        self.add_item(accept_btn)
+
+        # Кнопка "Обзвон" — только для заявок на вступление. Позволяет
+        # вызвать заявителя на обзвон ещё до решения по заявке (кнопки
+        # "Принять"/"Отклонить" остаются доступны и после).
+        if kind == "join":
+            call_btn = discord.ui.Button(
+                label="Обзвон",
+                style=discord.ButtonStyle.primary,
+                custom_id=f"decision_call_{kind}_{key}",
+            )
+            call_btn.callback = self.on_call
+            self.add_item(call_btn)
+
         decline_btn = discord.ui.Button(
             label="Отклонить",
             style=discord.ButtonStyle.danger,
             custom_id=f"decision_decline_{kind}_{key}",
         )
-        accept_btn.callback = self.on_accept
         decline_btn.callback = self.on_decline
-        self.add_item(accept_btn)
         self.add_item(decline_btn)
 
     async def on_accept(self, interaction: discord.Interaction):
@@ -44,6 +57,33 @@ class RequestDecisionView(discord.ui.View):
 
     async def on_decline(self, interaction: discord.Interaction):
         await interaction.response.send_modal(DeclineReasonModal(self.kind, self.key))
+
+    async def on_call(self, interaction: discord.Interaction):
+        # Ленивый импорт — applications.py импортирует этот модуль, поэтому
+        # импорт на уровне модуля создал бы циклическую зависимость.
+        import storage
+        import utils
+        from applications import ObzvonChannelSelectView
+
+        app = storage.DATA["applications"].get(self.key)
+        if app is None:
+            await interaction.response.send_message(f"Заявка `{self.key}` не найдена.", ephemeral=True)
+            return
+        if app["status"] != "pending":
+            await interaction.response.send_message(
+                f"Заявка `{self.key}` уже обработана (статус: {app['status']}).", ephemeral=True
+            )
+            return
+        if not utils.is_recruiter(interaction.user, app["server"]):
+            await interaction.response.send_message(
+                "У вас нет прав обрабатывать заявки этого сервера.", ephemeral=True
+            )
+            return
+
+        view = ObzvonChannelSelectView(self.key, app["server"])
+        await interaction.response.send_message(
+            "Выберите канал, в котором пройдёт обзвон:", view=view, ephemeral=True
+        )
 
 
 class DeclineReasonModal(discord.ui.Modal, title="Причина отказа"):
