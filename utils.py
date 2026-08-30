@@ -21,15 +21,18 @@ RECRUIT_ROLES = {
     "PHX": (config.RECRUIT_PHX, config.CHIEF_RECRUIT_PHX),
 }
 TICKET_CATEGORIES = {"DN": config.TICKET_CATEGORY_DN, "PHX": config.TICKET_CATEGORY_PHX}
+TICKET_ARCHIVE_CATEGORIES = {
+    "DN": config.TICKET_ARCHIVE_CATEGORY_DN,
+    "PHX": config.TICKET_ARCHIVE_CATEGORY_PHX,
+}
 LOGS_CHANNELS = {"DN": config.LOGS_CHANNEL_DN, "PHX": config.LOGS_CHANNEL_PHX}
 NEW_MEMBER_ROLES = {"DN": config.NEW_MEMBER_DN, "PHX": config.NEW_MEMBER_PHX}
+JOIN_SERVER_ROLES = {"DN": config.JOIN_SERVER_ROLE_DN, "PHX": config.JOIN_SERVER_ROLE_PHX}
 VACATION_CHANNELS = {"DN": config.VACATION_CHANNEL_DN, "PHX": config.VACATION_CHANNEL_PHX}
 VACATION_ROLES = {"DN": config.VACATION_ROLE_DN, "PHX": config.VACATION_ROLE_PHX}
 OBZVON_ROLES = {"DN": config.OBZVON_ROLE_DN, "PHX": config.OBZVON_ROLE_PHX}
 OBZVON_CHANNELS = {"DN": config.OBZVON_CHANNELS_DN, "PHX": config.OBZVON_CHANNELS_PHX}
 
-
-# ------------------------------- ПАРСИНГ ---------------------------------
 
 def parse_discord_id(raw: str):
     """Достаёт числовой ID из упоминания <@id>, <@!id> или просто из текста."""
@@ -84,6 +87,7 @@ def parse_stored_datetime(iso_value: str) -> datetime:
     return dt
 
 
+
 def parse_ten_minute_time(raw: str):
     """
     Парсит время вида "0:00", "0:10", "10:00", "10:30" — часы:минуты,
@@ -119,10 +123,7 @@ def is_vacation_staff(member: discord.Member) -> bool:
 async def get_member_safe(guild: discord.Guild, user_id):
     """
     Возвращает discord.Member по ID, сначала из кэша, а если там его нет —
-    запрашивает через API. Раньше бот использовал только guild.get_member,
-    который возвращает None, если участник не закэширован, из-за чего
-    роль отпуска могла "молча" не выдаваться — это и было причиной бага
-    из ТЗ (п. 4.1).
+    запрашивает через API.
     """
     if not user_id:
         return None
