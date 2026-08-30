@@ -1,14 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Общая логика обработки решений по заявкам — используется и кнопками
-"Принять"/"Отклонить", и слэш-командами /принять, /отклонить (п. 5.1-5.2
-ТЗ: команды и кнопки должны работать одинаково на оба типа заявок).
-
-Здесь же исправлен баг из п. 4.1 (роль отпуска не выдавалась): раньше
-участник искался только в кэше гильдии (guild.get_member), из-за чего
-при отсутствии в кэше поиск молча проваливался. Теперь используется
-utils.get_member_safe с запросом через API, а любые сбои подробно
-логируются (см. logger_setup.py и bot.log).
+Общая логика обработки решений по заявкам.
 """
 
 import asyncio
@@ -25,8 +17,6 @@ KIND_VACATION = "vacation"
 
 
 def find_kind(key: str):
-    """Определяет, к какому типу заявок относится ключ, и возвращает
-    ('join'|'vacation', нормализованный_ключ) либо (None, None)."""
     key = (key or "").strip().upper()
     if key in storage.DATA["applications"]:
         return KIND_JOIN, key
@@ -37,10 +27,6 @@ def find_kind(key: str):
 
 async def decide_request(guild: discord.Guild, staff_member: discord.Member,
                           kind: str, key: str, accepted: bool, reason: str = None):
-    """
-    Обрабатывает решение по заявке. Возвращает (ok: bool, message: str) —
-    message предназначен для показа сотруднику, принявшему решение.
-    """
     if kind == KIND_JOIN:
         return await _decide_join(guild, staff_member, key, accepted, reason)
     if kind == KIND_VACATION:
@@ -89,19 +75,22 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
             logger.error("Нет прав изменить ник участнику %s (заявка %s)", applicant.id, number)
             role_warning = "не удалось изменить ник (проверьте иерархию ролей бота)"
 
-        role = guild.get_role(utils.NEW_MEMBER_ROLES[server])
-        if role is None:
-            logger.error("Роль нового участника для %s не найдена на сервере %s", server, guild.id)
-        else:
+        # Сохраняем существующую роль нового участника и дополнительно
+        # выдаём роль сервера, указанную в ТЗ.
+        for role_id in (utils.NEW_MEMBER_ROLES[server], utils.JOIN_SERVER_ROLES[server]):
+            role = guild.get_role(role_id)
+            if role is None:
+                logger.error("Роль %s для %s не найдена на сервере %s", role_id, server, guild.id)
+                role_warning = "не удалось найти/выдать одну из ролей"
+                continue
             try:
                 await applicant.add_roles(role, reason=f"Заявка {number} одобрена")
                 logger.info("Роль %s выдана участнику %s (заявка %s)", role.id, applicant.id, number)
             except discord.Forbidden:
                 logger.error("Нет прав выдать роль %s участнику %s (заявка %s)", role.id, applicant.id, number)
-                role_warning = "не удалось выдать роль (проверьте иерархию ролей бота)"
+                role_warning = "не удалось выдать одну из ролей (проверьте иерархию ролей бота)"
 
-    # --- Снимаем роль обзвона (если выдавалась) — заявка обработана, доступ
-    # к каналу обзвона больше не нужен независимо от решения (п. "Обзвон").
+    # --- Снимаем роль обзвона после обработки заявки ---
     if applicant is not None:
         obzvon_role_id = utils.OBZVON_ROLES.get(server)
         obzvon_role = guild.get_role(obzvon_role_id) if obzvon_role_id else None
@@ -134,17 +123,10 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
     if logs_channel:
         await logs_channel.send(embed=log_embed)
 
-    # --- Тикет-канал: снимаем право писать, обновляем исходное сообщение ---
+    # --- Тикет: публикуем результат, закрываем заявителю доступ и переносим
+    # канал в архивную категорию вместо удаления. ---
     ticket_channel = guild.get_channel(app["channel_id"])
     if ticket_channel:
-        if applicant is not None:
-            try:
-                await ticket_channel.set_permissions(
-                    applicant, view_channel=True, send_messages=False, read_message_history=True
-                )
-            except discord.Forbidden:
-                pass
-
         await _finalize_ticket_message(ticket_channel, app.get("ticket_message_id"), result_label, accepted)
 
         result_embed = discord.Embed(
@@ -155,27 +137,36 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
             result_embed.description = f"Причина: {reason}"
         await ticket_channel.send(embed=result_embed)
 
-        # Баг п. 1.2 ТЗ v1.1.2: раньше тикет-канал не удалялся ни при
-        # принятии, ни при отклонении заявки — он оставался навсегда
-        # (у заявителя просто отбиралось право писать). Теперь канал
-        # автоматически удаляется через небольшую задержку.
-        asyncio.create_task(_delete_ticket_channel_later(ticket_channel, number))
+        if applicant is not None:
+            try:
+                # Явно закрываем заявителю просмотр и отправку сообщений.
+                await ticket_channel.set_permissions(
+                    applicant,
+                    view_channel=False,
+                    send_messages=False,
+                    read_message_history=False,
+                )
+            except discord.Forbidden:
+                logger.warning("Не удалось закрыть доступ заявителю %s к заявке %s", applicant.id, number)
+
+        archive_category_id = utils.TICKET_ARCHIVE_CATEGORIES[server]
+        archive_category = guild.get_channel(archive_category_id)
+        if archive_category is None:
+            logger.error("Архивная категория %s для %s не найдена", archive_category_id, server)
+        else:
+            try:
+                await ticket_channel.edit(
+                    category=archive_category,
+                    reason=f"Заявка {number} обработана — перенос в архив",
+                )
+                logger.info("Заявка %s перемещена в архивную категорию %s", number, archive_category.id)
+            except discord.Forbidden:
+                logger.error("Нет прав переместить канал заявки %s в архив", number)
 
     message = f"Заявка `{number}` обработана: {result_label}."
     if role_warning:
         message += f" Внимание: {role_warning}. Подробности в bot.log."
     return True, message
-
-
-async def _delete_ticket_channel_later(channel: discord.TextChannel, number: str):
-    await asyncio.sleep(config.TICKET_DELETE_DELAY_SECONDS)
-    try:
-        await channel.delete(reason=f"Заявка {number} обработана — автоочистка тикет-канала")
-        logger.info("Тикет-канал заявки %s удалён", number)
-    except (discord.NotFound, discord.Forbidden):
-        logger.warning(
-            "Не удалось удалить тикет-канал заявки %s (уже удалён или нет прав)", number
-        )
 
 
 async def _finalize_ticket_message(channel, message_id, result_label, accepted):
@@ -286,7 +277,6 @@ async def _finalize_vacation_log_message(guild, vac, vac_id, result_label, accep
         except (discord.NotFound, discord.Forbidden, IndexError):
             logger.warning("Не удалось обновить исходное сообщение заявки на отпуск %s", vac_id)
 
-    # Резервный вариант — если исходное сообщение не нашлось, публикуем новое
     if logs_channel:
         embed = discord.Embed(
             title=f"Отпуск {vac_id} — {result_label}",
