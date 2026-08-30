@@ -68,7 +68,7 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
     # --- Действия по заявителю при одобрении ---
     if accepted and applicant is not None:
         first_word = app["nickname"].strip().split(" ")[0] if app["nickname"].strip() else applicant.display_name
-        new_nick = f"New {server} {first_word}"
+        new_nick = f"New | {server} | {first_word}"
         try:
             await applicant.edit(nick=new_nick, reason=f"Заявка {number} одобрена")
         except discord.Forbidden:
