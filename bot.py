@@ -18,8 +18,6 @@ class BlinBot(commands.Bot):
     async def setup_hook(self):
         database.init_db()
         self.add_view(JoinInfoView())
-        self.add_view(VacationInfoView("DN"))
-        self.add_view(VacationInfoView("PHX"))
         for number, app in storage.DATA["applications"].items():
             if app.get("status") == "pending":
                 self.add_view(RequestDecisionView("join", number))
@@ -44,20 +42,13 @@ async def on_ready():
         channel_id = raw.get("recruit_info_channel")
         recruit_channel = guild.get_channel(channel_id) if channel_id else None
         if recruit_channel:
-            embed = discord.Embed(
-                title="Вступление в компанию",
-                description=config.RECRUIT_INFO_TEXT,
-                color=discord.Color.blurple(),
-            )
-            await utils.ensure_persistent_message(
-                recruit_channel,
-                storage.DATA,
-                f"recruit_info_{guild.id}",
-                [embed],
-                JoinInfoView(),
-            )
+            embed = discord.Embed(title="Вступление в компанию", description=config.RECRUIT_INFO_TEXT, color=discord.Color.blurple())
+            await utils.ensure_persistent_message(recruit_channel, storage.DATA, f"recruit_info_{guild.id}", [embed], JoinInfoView())
             await storage.persist()
-        for server in ("DN", "PHX"):
+
+        # Server profiles are created/configured in Dashboard. No server names or
+        # Discord object IDs are embedded in the bot entry point.
+        for server in database.server_keys(guild.id):
             if utils.VACATION_CHANNELS.get(server):
                 try:
                     await refresh_vacation_message(guild, server)
