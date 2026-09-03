@@ -10,7 +10,7 @@ import storage
 import vacations
 
 
-async def _autocomplete_number(interaction, current):
+async def _autocomplete_number(interaction: discord.Interaction, current: str):
     """Suggest only pending requests belonging to the current guild."""
     current = (current or "").upper()
     choices = []
@@ -28,7 +28,7 @@ async def _autocomplete_number(interaction, current):
     return choices[:25]
 
 
-def _module_ok(interaction, module):
+def _module_ok(interaction: discord.Interaction, module: str) -> bool:
     return bool(interaction.guild and database.module_enabled(interaction.guild.id, module))
 
 
@@ -36,7 +36,7 @@ def register_commands(bot: commands.Bot):
     @bot.tree.command(name="принять", description="Принять заявку")
     @app_commands.describe(номер="Номер заявки")
     @app_commands.autocomplete(номер=_autocomplete_number)
-    async def accept(i, номер):
+    async def accept(i: discord.Interaction, номер: str):
         if not i.guild:
             return await i.response.send_message("Только на сервере.", ephemeral=True)
         if not _module_ok(i, "applications"):
@@ -51,7 +51,7 @@ def register_commands(bot: commands.Bot):
     @bot.tree.command(name="отклонить", description="Отклонить заявку")
     @app_commands.describe(номер="Номер заявки", причина="Причина")
     @app_commands.autocomplete(номер=_autocomplete_number)
-    async def decline(i, номер, причина):
+    async def decline(i: discord.Interaction, номер: str, причина: str):
         if not i.guild:
             return await i.response.send_message("Только на сервере.", ephemeral=True)
         if not _module_ok(i, "applications"):
@@ -65,7 +65,7 @@ def register_commands(bot: commands.Bot):
 
     @bot.tree.command(name="вынесение_из_отпуска", description="Принудительно вынести из отпуска")
     @app_commands.describe(участник="Участник", причина="Причина")
-    async def force(i, участник: discord.Member, причина: str):
+    async def force(i: discord.Interaction, участник: discord.Member, причина: str):
         if not i.guild:
             return await i.response.send_message("Только на сервере.", ephemeral=True)
         if not _module_ok(i, "vacations"):
@@ -76,7 +76,7 @@ def register_commands(bot: commands.Bot):
 
     @bot.tree.command(name="выдать_выговор", description="Выдать строгий выговор")
     @app_commands.describe(кому="Кому выдать", причина="Причина", отработка="Отработка")
-    async def warning(i, кому: discord.Member, причина: str, отработка: str = ""):
+    async def warning(i: discord.Interaction, кому: discord.Member, причина: str, отработка: str = ""):
         if not i.guild:
             return await i.response.send_message("Только на сервере.", ephemeral=True)
         if not _module_ok(i, "discipline"):
