@@ -17,9 +17,9 @@ class JoinModal(discord.ui.Modal):
     ooc_name = discord.ui.TextInput(label="Ваше OOC имя", max_length=100)
     previous_families = discord.ui.TextInput(label="В каких семьях были?", style=discord.TextStyle.paragraph, max_length=300, required=False)
 
-    def __init__(self, server: str):
-        super().__init__(title=f"Заявка на вступление — {server}")
-        self.server = server
+    def __init__(self, server_key: str, server_name: str):
+        super().__init__(title=f"Заявка на вступление — {server_name}")
+        self.server_key = server_key
 
     async def on_submit(self, interaction: discord.Interaction):
         age_raw = str(self.ooc_age.value).strip()
@@ -29,7 +29,7 @@ class JoinModal(discord.ui.Modal):
             await interaction.response.send_message("❌ Заявка автоматически отклонена: указан некорректный OOC возраст. Допустимый диапазон — от 14 до 50 лет.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
-        await create_join_ticket(interaction, self.server, {
+        await create_join_ticket(interaction, self.server_key, {
             "nickname": str(self.nickname.value), "static": str(self.static.value),
             "ooc_age": age_raw, "ooc_name": str(self.ooc_name.value),
             "previous_families": str(self.previous_families.value) or "—",
@@ -44,33 +44,30 @@ class JoinInfoView(discord.ui.View):
             button.callback = self._make_callback(key)
             self.add_item(button)
 
-    def _make_callback(self, server):
-        async def callback(interaction):
-            await self._open(interaction, server)
+    def _make_callback(self, server_key):
+        async def callback(interaction): await self._open(interaction, server_key)
         return callback
 
-    async def _open(self, interaction, server):
-        if not database.get_server_config(interaction.guild.id, server):
+    async def _open(self, interaction, server_key):
+        server_cfg = database.get_server_config(interaction.guild.id, server_key)
+        if not server_cfg:
             await interaction.response.send_message("❌ Этот профиль сервера ещё не настроен в Dashboard.", ephemeral=True)
             return
         last_iso = storage.DATA["join_cooldowns"].get(str(interaction.user.id))
         remaining = 0
         if last_iso:
-            try:
-                remaining = max(0.0, config.JOIN_APPLICATION_COOLDOWN_SECONDS - (utils.now() - utils.parse_stored_datetime(last_iso)).total_seconds())
-            except ValueError:
-                pass
+            try: remaining = max(0.0, config.JOIN_APPLICATION_COOLDOWN_SECONDS - (utils.now() - utils.parse_stored_datetime(last_iso)).total_seconds())
+            except ValueError: pass
         if remaining > 0:
             await interaction.response.send_message(f"⏳ Подавать заявку можно не чаще раза в {config.JOIN_APPLICATION_COOLDOWN_SECONDS // 60} мин. Попробуйте снова через {int(remaining)} сек.", ephemeral=True)
             return
+        server_name = server_cfg.get("name", server_key)
         if not database.has_consent(interaction.guild.id, interaction.user.id):
-            async def accepted(i):
-                await i.response.send_modal(JoinModal(database.get_server_config(i.guild.id, server).get("name", server)))
-            async def declined(i):
-                await i.response.send_message("Заявка не создана: вы не дали согласие на системные уведомления.", ephemeral=True)
+            async def accepted(i): await i.response.send_modal(JoinModal(server_key, server_name))
+            async def declined(i): await i.response.send_message("Заявка не создана: вы не дали согласие на системные уведомления.", ephemeral=True)
             await interaction.response.send_message(consent_text(), view=NotificationConsentView(accepted, declined), ephemeral=True)
             return
-        await interaction.response.send_modal(JoinModal(database.get_server_config(interaction.guild.id, server).get("name", server)))
+        await interaction.response.send_modal(JoinModal(server_key, server_name))
 
 
 async def create_join_ticket(interaction: discord.Interaction, server: str, form: dict):
@@ -84,11 +81,7 @@ async def create_join_ticket(interaction: discord.Interaction, server: str, form
     recruit_roles = utils.RECRUIT_ROLES[server]
     recruit_role = guild.get_role(recruit_roles[0]) if len(recruit_roles) > 0 else None
     chief_role = guild.get_role(recruit_roles[1]) if len(recruit_roles) > 1 else None
-    overwrites = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
-        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
-    }
+    overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True), guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)}
     if recruit_role: overwrites[recruit_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
     if chief_role: overwrites[chief_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
     channel = await category.create_text_channel(name=number, overwrites=overwrites, reason=f"Заявка на вступление {number}")
@@ -127,8 +120,7 @@ class ObzvonChannelSelectView(discord.ui.View):
 
 async def call_to_obzvon(guild: discord.Guild, number: str, channel_id: int, clicker: discord.Member | None = None):
     app = storage.DATA["applications"].get(number)
-    if app is None or app.get("guild_id", guild.id) != guild.id:
-        return False, f"Заявка `{number}` не найдена на этом сервере."
+    if app is None or app.get("guild_id", guild.id) != guild.id: return False, f"Заявка `{number}` не найдена на этом сервере."
     if app["status"] != "pending": return False, f"Заявка `{number}` уже обработана (статус: {app['status']})."
     server = app["server"]
     applicant = await utils.get_member_safe(guild, app["applicant_id"])
