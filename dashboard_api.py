@@ -72,13 +72,22 @@ def create_app(bot):
 
     @web.middleware
     async def auth(request, handler):
-        if request.path in {"/health", "/auth/discord", "/auth/callback"} or request.method == "OPTIONS": return await handler(request)
+        if request.path in {"/", "/health", "/auth/discord", "/auth/callback"} or request.method == "OPTIONS": return await handler(request)
         session = _auth(request)
         if not session: return _error("unauthorized", 401)
         request["blin_session"] = session
         return await handler(request)
 
     app = web.Application(middlewares=[cors, auth])
+
+    async def root(request):
+        return web.json_response({
+            "service": "Blin Bot API",
+            "status": "online",
+            "api_version": 3,
+            "dashboard": "ready",
+            "health": "/health",
+        })
 
     async def health(request): return web.json_response({"ok": True, "service": "blin-bot", "api_version": 3})
 
@@ -214,7 +223,7 @@ def create_app(bot):
         database.set_consent(guild.id, user_id, enabled); return web.json_response({"ok": True, "enabled": enabled})
 
     app.add_routes([
-        web.get("/health", health), web.get("/auth/discord", auth_discord), web.get("/auth/callback", auth_callback), web.get("/api/me", auth_me), web.post("/api/logout", auth_logout),
+        web.get("/", root), web.get("/health", health), web.get("/auth/discord", auth_discord), web.get("/auth/callback", auth_callback), web.get("/api/me", auth_me), web.post("/api/logout", auth_logout),
         web.get("/api/guilds", guilds), web.get("/api/guilds/{guild_id}/objects", objects), web.get("/api/guilds/{guild_id}/config", cfg), web.put("/api/guilds/{guild_id}/config", cfg),
         web.get("/api/guilds/{guild_id}/modules", modules), web.put("/api/guilds/{guild_id}/modules", modules), web.get("/api/guilds/{guild_id}/contracts", contracts), web.post("/api/guilds/{guild_id}/contracts", contracts),
         web.post("/api/guilds/{guild_id}/contracts/{contract_id}/publish", publish_contract), web.post("/api/guilds/{guild_id}/provision", provision), web.get("/api/guilds/{guild_id}/warnings", warnings),
