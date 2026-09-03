@@ -29,20 +29,19 @@ class JoinModal(discord.ui.Modal):
             await interaction.response.send_message("❌ Заявка автоматически отклонена: указан некорректный OOC возраст. Допустимый диапазон — от 14 до 50 лет.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
-        await create_join_ticket(interaction, self.server_key, {
-            "nickname": str(self.nickname.value), "static": str(self.static.value),
-            "ooc_age": age_raw, "ooc_name": str(self.ooc_name.value),
-            "previous_families": str(self.previous_families.value) or "—",
-        })
+        await create_join_ticket(interaction, self.server_key, {"nickname": str(self.nickname.value), "static": str(self.static.value), "ooc_age": age_raw, "ooc_name": str(self.ooc_name.value), "previous_families": str(self.previous_families.value) or "—"})
 
 
 class JoinInfoView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, servers: dict | None = None):
         super().__init__(timeout=None)
-        for label, key, style in (("Denver", "DN", discord.ButtonStyle.primary), ("Phoenix", "PHX", discord.ButtonStyle.danger)):
-            button = discord.ui.Button(label=label, style=style, custom_id=f"join_apply_{key}")
+        servers = servers or {"DN": {"name": "Denver"}, "PHX": {"name": "Phoenix"}}
+        for key, cfg in servers.items():
+            name = str(cfg.get("name", key))[:80] if isinstance(cfg, dict) else str(key)[:80]
+            button = discord.ui.Button(label=name, style=discord.ButtonStyle.primary, custom_id=f"join_apply_{key}")
             button.callback = self._make_callback(key)
             self.add_item(button)
+            if len(self.children) >= 25: break
 
     def _make_callback(self, server_key):
         async def callback(interaction): await self._open(interaction, server_key)
@@ -51,7 +50,7 @@ class JoinInfoView(discord.ui.View):
     async def _open(self, interaction, server_key):
         server_cfg = database.get_server_config(interaction.guild.id, server_key)
         if not server_cfg:
-            await interaction.response.send_message("❌ Этот профиль сервера ещё не настроен в Dashboard.", ephemeral=True)
+            await interaction.response.send_message("❌ Этот профиль ещё не настроен в Dashboard.", ephemeral=True)
             return
         last_iso = storage.DATA["join_cooldowns"].get(str(interaction.user.id))
         remaining = 0
