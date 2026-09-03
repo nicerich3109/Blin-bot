@@ -1,92 +1,47 @@
 # -*- coding: utf-8 -*-
-"""
-Слэш-команды /принять, /отклонить и /вынесение_из_отпуска.
-
-По ТЗ v1.1 (п. 5.1) команды /принять и /отклонить должны работать
-одинаково и для заявок на вступление, и для заявок на отпуск — тип
-заявки определяется автоматически по номеру (find_kind), а вся логика
-решения общая (decisions.decide_request), как и у кнопок в
-ui_decision.py.
-
-П. 2.2 ТЗ v1.1.2: /вынесение_из_отпуска принудительно выносит участника
-из отпуска раньше срока (сама логика — в vacations.force_remove_vacation).
-Параметр "участник" имеет тип discord.Member, поэтому Discord сам не даёт
-выбрать несуществующего человека или того, кого нет на сервере (п. 2.1).
-"""
-
 import discord
 from discord import app_commands
 from discord.ext import commands
+import decisions, storage, vacations, database, discipline
 
-import decisions
-import storage
-import vacations
-
-
-async def _autocomplete_number(interaction: discord.Interaction, current: str):
-    current = (current or "").upper()
-    choices = []
-
-    for number, app in storage.DATA["applications"].items():
-        if app["status"] == "pending" and current in number:
-            choices.append(app_commands.Choice(name=f"{number} (вступление)", value=number))
-
-    for vac_id, vac in storage.DATA["vacations"].items():
-        if vac["status"] == "pending" and current in vac_id:
-            choices.append(app_commands.Choice(name=f"{vac_id} (отпуск)", value=vac_id))
-
+async def _autocomplete_number(interaction,current):
+    current=(current or "").upper(); choices=[]
+    for number,app in storage.DATA["applications"].items():
+        if app["status"]=="pending" and current in number: choices.append(app_commands.Choice(name=f"{number} (вступление)",value=number))
+    for vid,vac in storage.DATA["vacations"].items():
+        if vac["status"]=="pending" and current in vid: choices.append(app_commands.Choice(name=f"{vid} (отпуск)",value=vid))
     return choices[:25]
 
-
-def register_commands(bot: commands.Bot):
-    @bot.tree.command(name="принять", description="Принять заявку (на вступление или отпуск)")
-    @app_commands.describe(номер="Номер заявки, например DN-001 или DN-VAC-001")
+def register_commands(bot:commands.Bot):
+    @bot.tree.command(name="принять",description="Принять заявку")
+    @app_commands.describe(номер="Номер заявки")
     @app_commands.autocomplete(номер=_autocomplete_number)
-    async def cmd_accept(interaction: discord.Interaction, номер: str):
-        if interaction.guild is None:
-            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
-            return
-        kind, key = decisions.find_kind(номер)
-        if kind is None:
-            await interaction.response.send_message(f"Заявка `{номер}` не найдена.", ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        ok, message = await decisions.decide_request(interaction.guild, interaction.user, kind, key, True)
-        await interaction.followup.send(message, ephemeral=True)
+    async def accept(i,номер):
+        if not i.guild: return await i.response.send_message("Только на сервере.",ephemeral=True)
+        kind,key=decisions.find_kind(номер)
+        if not kind:return await i.response.send_message("Заявка не найдена.",ephemeral=True)
+        await i.response.defer(ephemeral=True,thinking=True); _,msg=await decisions.decide_request(i.guild,i.user,kind,key,True); await i.followup.send(msg,ephemeral=True)
 
-    @bot.tree.command(name="отклонить", description="Отклонить заявку (на вступление или отпуск)")
-    @app_commands.describe(номер="Номер заявки, например DN-001 или DN-VAC-001", причина="Причина отказа")
+    @bot.tree.command(name="отклонить",description="Отклонить заявку")
+    @app_commands.describe(номер="Номер заявки",причина="Причина")
     @app_commands.autocomplete(номер=_autocomplete_number)
-    async def cmd_decline(interaction: discord.Interaction, номер: str, причина: str):
-        if interaction.guild is None:
-            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
-            return
-        kind, key = decisions.find_kind(номер)
-        if kind is None:
-            await interaction.response.send_message(f"Заявка `{номер}` не найдена.", ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        ok, message = await decisions.decide_request(
-            interaction.guild, interaction.user, kind, key, False, reason=причина
-        )
-        await interaction.followup.send(message, ephemeral=True)
+    async def decline(i,номер,причина):
+        if not i.guild:return await i.response.send_message("Только на сервере.",ephemeral=True)
+        kind,key=decisions.find_kind(номер)
+        if not kind:return await i.response.send_message("Заявка не найдена.",ephemeral=True)
+        await i.response.defer(ephemeral=True,thinking=True); _,msg=await decisions.decide_request(i.guild,i.user,kind,key,False,reason=причина); await i.followup.send(msg,ephemeral=True)
 
-    @bot.tree.command(
-        name="вынесение_из_отпуска",
-        description="Принудительно вынести участника из отпуска раньше срока",
-    )
-    @app_commands.describe(
-        участник="Кого вынести из отпуска (тег/выбор участника сервера)",
-        причина="Причина принудительного выноса",
-    )
-    async def cmd_force_remove_vacation(
-        interaction: discord.Interaction, участник: discord.Member, причина: str
-    ):
-        if interaction.guild is None:
-            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        ok, message = await vacations.force_remove_vacation(
-            interaction.guild, interaction.user, участник, причина
-        )
-        await interaction.followup.send(message, ephemeral=True)
+    @bot.tree.command(name="вынесение_из_отпуска",description="Принудительно вынести из отпуска")
+    @app_commands.describe(участник="Участник",причина="Причина")
+    async def force(i,участник:discord.Member,причина:str):
+        if not i.guild:return await i.response.send_message("Только на сервере.",ephemeral=True)
+        await i.response.defer(ephemeral=True,thinking=True); _,msg=await vacations.force_remove_vacation(i.guild,i.user,участник,причина); await i.followup.send(msg,ephemeral=True)
+
+    @bot.tree.command(name="выдать_выговор",description="Выдать строгий выговор")
+    @app_commands.describe(кому="Кому выдать",причина="Причина",отработка="Отработка")
+    async def warning(i,кому:discord.Member,причина:str,отработка:str=""):
+        if not i.guild:return await i.response.send_message("Только на сервере.",ephemeral=True)
+        if not i.user.guild_permissions.manage_roles and not i.user.guild_permissions.administrator:
+            return await i.response.send_message("Недостаточно прав.",ephemeral=True)
+        cfg=database.get_config(i.guild.id); channel_id=cfg.get("discipline_channel"); channel=i.guild.get_channel(channel_id) if channel_id else None
+        await i.response.defer(ephemeral=True,thinking=True); _,msg=await discipline.issue_warning(i.guild,i.user,кому,причина,отработка,channel); await i.followup.send(msg,ephemeral=True)
