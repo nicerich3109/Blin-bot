@@ -12,8 +12,6 @@ from dashboard_api import start_api
 
 intents = discord.Intents.default()
 intents.members = True
-# Required by any remaining legacy prefix/message-content handlers. Slash commands
-# themselves do not require this privileged intent.
 intents.message_content = True
 
 
@@ -28,7 +26,12 @@ class BlinBot(commands.Bot):
                 self.add_view(RequestDecisionView("vacation", vac_id))
         register_commands(self)
         await self.tree.sync()
-        await start_api(self)
+        try:
+            self.dashboard_runner = await start_api(self)
+            logger.info("Dashboard API запущен на %s:%s", config.API_HOST, config.API_PORT)
+        except Exception:
+            logger.exception("Не удалось запустить Dashboard API на %s:%s", config.API_HOST, config.API_PORT)
+            raise
 
 
 bot = BlinBot(command_prefix="!", intents=intents)
