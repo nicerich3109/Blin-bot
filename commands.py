@@ -41,7 +41,7 @@ def register_commands(bot: commands.Bot):
             return await i.response.send_message("Только на сервере.", ephemeral=True)
         if not _module_ok(i, "applications"):
             return await i.response.send_message("Модуль заявок отключён в настройках сервера.", ephemeral=True)
-        kind, key = decisions.find_kind(номер)
+        kind, key = decisions.find_kind(номер, i.guild.id)
         if not kind:
             return await i.response.send_message("Заявка не найдена.", ephemeral=True)
         await i.response.defer(ephemeral=True, thinking=True)
@@ -56,7 +56,7 @@ def register_commands(bot: commands.Bot):
             return await i.response.send_message("Только на сервере.", ephemeral=True)
         if not _module_ok(i, "applications"):
             return await i.response.send_message("Модуль заявок отключён в настройках сервера.", ephemeral=True)
-        kind, key = decisions.find_kind(номер)
+        kind, key = decisions.find_kind(номер, i.guild.id)
         if not kind:
             return await i.response.send_message("Заявка не найдена.", ephemeral=True)
         await i.response.defer(ephemeral=True, thinking=True)
