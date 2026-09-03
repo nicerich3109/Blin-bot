@@ -7,7 +7,9 @@ DATA_FILE = os.getenv("BLIN_LEGACY_DATA_FILE", "data.json")
 LOG_FILE = os.getenv("BLIN_LOG_FILE", "bot.log")
 DB_PATH = os.getenv("BLIN_DB_PATH", "blin.sqlite3")
 API_HOST = os.getenv("BLIN_API_HOST", "0.0.0.0")
-API_PORT = int(os.getenv("BLIN_API_PORT", "3000"))
+# Bothost exposes the public web-service port through PORT. Keep
+# BLIN_API_PORT as a local/self-hosted override for other environments.
+API_PORT = int(os.getenv("PORT", os.getenv("BLIN_API_PORT", "3000")))
 API_SECRET = os.getenv("BLIN_API_SECRET", "")
 API_ALLOWED_ORIGINS = os.getenv("BLIN_API_ALLOWED_ORIGINS", "")
 
