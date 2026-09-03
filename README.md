@@ -1,159 +1,103 @@
-🥞 Blin-bot — бот-помощник для определенного сервера Discord
+# Blin Bot
 
-Blin-bot управляет заявками на вступление и заявками на отпуск для
-MajesticRP на двух под-серверах (**Denver** и **Phoenix**).
-Построен на **discord.py**, все данные хранятся в `data.json`.
+Blin Bot is a Discord automation bot built around a **Dashboard-first** configuration model.
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
-![discord.py](https://img.shields.io/badge/discord.py-2.4%2B-5865F2?logo=discord&logoColor=white)
-![Servers](https://img.shields.io/badge/Servers-Denver%20%7C%20Phoenix-orange)
-![Storage](https://img.shields.io/badge/Storage-JSON-lightgrey)
-![License](https://img.shields.io/badge/License-Educational%20Use-brightgreen)
+The long-term architecture is:
 
----
+```text
+Discord user
+     │
+     ▼
+Blin Dashboard ── Discord OAuth2 ──► Dashboard backend
+                                      │
+                                      │ authenticated API
+                                      ▼
+                                   Blin Bot
+                                      │
+                                      ▼
+                                  Discord API
 
-## 📌 Оглавление
-
-- [✨ Основные возможности](#-основные-возможности)
-- [🚀 Функции](#-функции)
-- [🧩 Технологии](#-технологии)
-- [📁 Структура проекта](#-структура-проекта)
-- [⚡ Быстрый старт](#-быстрый-старт)
-- [🕘 История изменений](#-история-изменений)
-- [📄 Лицензия](#-лицензия)
-
----
-
-## ✨ Основные возможности
-
-- 🖥️ Все действия — через кнопки и слэш-команды, без ручного редактирования ролей
-- 🎫 Приватные тикет-каналы для каждой заявки на вступление
-- 📞 Обзвон заявителя прямо из тикета, с автоматической выдачей роли доступа к каналу обзвона
-- 🌴 Заявки на отпуск с точным временем окончания и автоснятием роли по расписанию
-- ⏳ Кулдаун на подачу заявок — защита от спама
-- 🪵 Подробное логирование всех действий и ошибок в `bot.log`
-
----
-
-## 🚀 Функции
-
-### Заявки на вступление в семью
-
-### Заявки на отпуск
-
----
-
-## 🧩 Технологии
-
-| Технология | Назначение |
-|---|---|
-| **Python 3.10+** | язык реализации |
-| **discord.py 2.4+** | взаимодействие с Discord API, слэш-команды, кнопки, модалки |
-| **JSON (`data.json`)** | персистентное хранилище заявок, отпусков и счётчиков |
-| **logging + RotatingFileHandler** | логирование в консоль и `bot.log` с ротацией |
-| **asyncio** | фоновая проверка окончания отпусков |
-
----
-
-## 📁 Структура проекта
-
-| Файл | Назначение |
-|---|---|
-| `config.py` | Все ID каналов/разделов/ролей, токен, таймауты и кулдауны |
-| `logger_setup.py` | Настройка логирования в консоль и в файл `bot.log` |
-| `storage.py` | Хранение данных в `data.json` (заявки, отпуска, счётчики, кулдауны) |
-| `utils.py` | Парсинг даты/времени, права доступа, безопасный поиск участника, персистентные сообщения |
-| `decisions.py` | Общая логика принятия/отклонения заявок (вступление и отпуск) |
-| `ui_decision.py` | Кнопки «Принять» / «Обзвон» / «Отклонить» и модалка причины отказа |
-| `applications.py` | Заявки на вступление: кнопки Denver/Phoenix, модалка, тикет-канал, обзвон |
-| `vacations.py` | Заявки на отпуск: модалка, список отпускников, снятие роли по сроку |
-| `commands.py` | Слэш-команды `/принять`, `/отклонить`, `/вынесение_из_отпуска` |
-| `bot.py` | Точка входа — запускать нужно именно этот файл |
-
----
-
-## ⚡ Быстрый старт
-
-### Установка
-
-```bash
-python3 -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+                    persistent configuration/state
+                              │
+                              ▼
+                         SQLite / PostgreSQL
 ```
 
-### Настройка
+## Important design rule
 
-1. В Discord Developer Portal у приложения бота включите **Privileged
-   Gateway Intents → Server Members Intent**.
-2. Выдайте боту права: `Manage Roles`, `Manage Channels`,
-   `Manage Nicknames`, `View Channels`, `Send Messages`,
-   `Embed Links`, `Read Message History`.
-3. **Важно:** роль бота должна стоять **выше** ролей рекрутёров, новых
-   участников, ролей отпуска и ролей обзвона в списке ролей сервера —
-   иначе бот не сможет их выдавать/снимать и менять ники таким людям.
-4. Задайте токен бота:
-```bash
-   export DISCORD_TOKEN="ваш_токен"
+**Discord IDs are not configuration constants in the source code.**
+
+The bot discovers the current guild roles, channels and categories from Discord. The Dashboard displays them by name and stores the selected Discord IDs in the database as runtime configuration.
+
+This means the same bot build can serve multiple unrelated Discord servers without a separate code/config file for each server.
+
+## Modules
+
+The bot is being split into independently configurable modules:
+
+- applications — recruitment applications and tickets;
+- vacations — vacation requests, active vacation list and automatic expiry;
+- contracts — configurable contract/bonus forms;
+- discipline — strict-warning workflow and history;
+- dm_notifications — opt-in direct-message notifications;
+- reaction_roles — configurable role buttons.
+
+Module state is stored per guild and can be enabled/disabled through the Dashboard API.
+
+## Database
+
+`database.py` is the persistent configuration layer. The default backend is SQLite for simple deployment and development.
+
+The database stores:
+
+- guilds and their enabled state;
+- per-guild Discord configuration;
+- module switches and module settings;
+- persistent bot state;
+- DM consent;
+- contract blocks;
+- disciplinary warning history;
+- reaction-role configurations.
+
+If an existing installation has `data.json`, the compatibility layer can import it once into the database.
+
+## Dashboard API
+
+The bot exposes a small JSON API for the Dashboard:
+
+- `GET /health`
+- `GET /api/guilds`
+- `GET /api/guilds/{guild_id}/objects`
+- `GET|PUT /api/guilds/{guild_id}/config`
+- `GET|PUT /api/guilds/{guild_id}/modules`
+- `GET|POST /api/guilds/{guild_id}/contracts`
+- `GET /api/guilds/{guild_id}/warnings`
+- `GET|POST /api/guilds/{guild_id}/reaction-roles`
+- `PUT /api/guilds/{guild_id}/consent`
+
+For development the API can be protected with `X-Blin-Secret`. **Do not put this secret into browser JavaScript.** Production authentication is intended to use Discord OAuth2 in a Dashboard backend, which then calls the bot API server-to-server.
+
+## Environment
+
+Copy `.env.example` and set at least:
+
+```text
+DISCORD_TOKEN=...
+BLIN_API_SECRET=...
 ```
-5. При необходимости укажите `GUILD_ID` в `config.py` — тогда
-   слэш-команды появятся на сервере мгновенно после запуска (иначе
-   обновление может занять до часа).
-6. Проверьте, что все ID в `config.py` (каналы, роли, в том числе роли
-   и каналы обзвона) совпадают с реальными ID на вашем сервере
-   (Настройки → Дополнительно → Режим разработчика → ПКМ по
-   каналу/роли → «Копировать ID»).
 
-### Запуск
+Optional settings include the database path, API host/port, allowed frontend origins, timezone and Discord OAuth2 credentials.
 
-```bash
-python3 bot.py
-```
+## Server provisioning
 
-Логи пишутся одновременно в консоль и в файл `bot.log` (с ротацией —
-старые логи архивируются, файл не растёт бесконечно). При проблемах с
-выдачей ролей или другими действиями бота в первую очередь смотрите
-именно `bot.log` — там указана точная причина (участник не найден,
-роль не найдена, у бота нет прав и т.п.).
+`provisioning.py` contains the safe foundation for Dashboard-driven server setup. It creates only missing roles/categories/text channels described by a blueprint and never deletes existing Discord objects.
 
-При старте бот сам разместит (или обновит, если уже есть) сообщения с
-кнопками в канале заявок на вступление и в обоих каналах отпуска
-(Denver и Phoenix).
+The Dashboard can therefore provide a guided "Create structure" workflow without requiring an administrator to copy Discord IDs into configuration.
 
----
+## Discord safety
 
-## 🕘 История изменений
-### v1.1.1
+The bot does not attempt to bypass Discord restrictions. Direct messages are opt-in and delivery failures are handled as normal failures. Discord permissions and role hierarchy remain authoritative.
 
-**Добавлено**
-- Выбор сервера в заявке на вступление через кнопки **Denver** /
-  **Phoenix** вместо текстового поля.
-- Кнопки **Принять** / **Отклонить** прямо в заявках, в дополнение к
-  командам.
-- Модальное окно «Причина» при отказе.
-- Команды `/принять` и `/отклонить`, работающие с обоими типами
-  заявок автоматически.
-- Поле «Время окончания» в заявке на отпуск с шагом 10 минут.
-- Файл `bot.log` с подробным логированием.
-- Код разложен по отдельным файлам вместо одного `bot.py`.
+## Current status
 
-**Исправлено**
-- Баг с невыдачей роли отпуска при одобрении заявки (не искался
-  участник через API при промахе локального кэша).
-
-**Убрано**
-- Поля «Планы после вступления» и «Откуда узнали о нас» из заявки на
-  вступление.
-- Поле «Сервер» из заявки на отпуск (теперь определяется каналом).
-- Команды `/принял`/`/отклонил` переименованы в `/принять`/`/отклонить`.
-
-### v1.0
-- Заявки на вступление и на отпуск в базовом виде, весь код в одном
-  файле `bot.py`.
-
----
-
-## 📄 Лицензия
-
-Проект создан в учебных целях для внутреннего использования на Дискорд сервере по тематике
-Majestic-RP. 
+The repository is in the migration phase from the original Discord-configured implementation to the Dashboard-first architecture. Existing application/vacation workflows are retained while their configuration is progressively moved behind the runtime configuration layer.
