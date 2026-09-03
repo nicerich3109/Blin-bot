@@ -12,15 +12,20 @@ from dashboard_api import start_api
 
 intents = discord.Intents.default()
 intents.members = True
+# Required by any remaining legacy prefix/message-content handlers. Slash commands
+# themselves do not require this privileged intent.
+intents.message_content = True
 
 
 class BlinBot(commands.Bot):
     async def setup_hook(self):
         database.init_db()
         for number, app in storage.DATA["applications"].items():
-            if app.get("status") == "pending": self.add_view(RequestDecisionView("join", number))
+            if app.get("status") == "pending":
+                self.add_view(RequestDecisionView("join", number))
         for vac_id, vac in storage.DATA["vacations"].items():
-            if vac.get("status") == "pending": self.add_view(RequestDecisionView("vacation", vac_id))
+            if vac.get("status") == "pending":
+                self.add_view(RequestDecisionView("vacation", vac_id))
         register_commands(self)
         await self.tree.sync()
         await start_api(self)
@@ -45,18 +50,24 @@ async def on_ready():
             await storage.persist()
         for server in database.server_keys(guild.id):
             if utils.VACATION_CHANNELS.get(server):
-                try: await refresh_vacation_message(guild, server)
-                except discord.HTTPException: logger.exception("Не удалось обновить сообщение отпуска для %s", server)
+                try:
+                    await refresh_vacation_message(guild, server)
+                except discord.HTTPException:
+                    logger.exception("Не удалось обновить сообщение отпуска для %s", server)
         try:
             changed = await check_and_expire_vacations(guild)
-            for server in changed: await refresh_vacation_message(guild, server)
+            for server in changed:
+                await refresh_vacation_message(guild, server)
             await restore_vacation_schedules(guild)
-        except Exception: logger.exception("Ошибка инициализации отпусков на %s", guild.id)
+        except Exception:
+            logger.exception("Ошибка инициализации отпусков на %s", guild.id)
 
 
 def main():
-    if not config.TOKEN: raise SystemExit("Не задан DISCORD_TOKEN")
+    if not config.TOKEN:
+        raise SystemExit("Не задан DISCORD_TOKEN")
     bot.run(config.TOKEN)
 
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()
