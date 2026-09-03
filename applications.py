@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Applications and recruiter call flow. All Discord object IDs come from guild configuration."""
+"""Applications and recruiter call flow. Discord object IDs come only from guild configuration."""
 import re
 import discord
 import config
 import storage
 import utils
+import database
+from notifications import NotificationConsentView, consent_text
 from ui_decision import RequestDecisionView
 
 
@@ -16,17 +18,15 @@ class JoinModal(discord.ui.Modal):
     previous_families = discord.ui.TextInput(label="В каких семьях были?", style=discord.TextStyle.paragraph, max_length=300, required=False)
 
     def __init__(self, server: str):
-        super().__init__(title=f"Заявка на вступление — {utils.server_name(self.guild_id, server) if self.guild_id else server}")
+        super().__init__(title=f"Заявка на вступление — {server}")
         self.server = server
-        self.guild_id = None
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.guild_id = interaction.guild.id
         age_raw = str(self.ooc_age.value).strip()
         age_digits = re.sub(r"\D", "", age_raw)
         age_value = int(age_digits) if age_digits else None
         if age_value is None or not (14 <= age_value <= 50):
-            await interaction.response.send_message("❌ Заявка автоматически отклонена: указан некорректный OOC возраст. Допустимый диапазон — от 14 до 50 лет. Допустимый диапазон — от 14 до 50 лет.", ephemeral=True)
+            await interaction.response.send_message("❌ Заявка автоматически отклонена: указан некорректный OOC возраст. Допустимый диапазон — от 14 до 50 лет.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
         await create_join_ticket(interaction, self.server, {
@@ -39,8 +39,6 @@ class JoinModal(discord.ui.Modal):
 class JoinInfoView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        # The legacy two profiles remain UI labels; their Discord IDs are not
-        # embedded here and are resolved only from the current guild config.
         for label, key, style in (("Denver", "DN", discord.ButtonStyle.primary), ("Phoenix", "PHX", discord.ButtonStyle.danger)):
             button = discord.ui.Button(label=label, style=style, custom_id=f"join_apply_{key}")
             button.callback = self._make_callback(key)
@@ -52,26 +50,27 @@ class JoinInfoView(discord.ui.View):
         return callback
 
     async def _open(self, interaction, server):
+        if not database.get_server_config(interaction.guild.id, server):
+            await interaction.response.send_message("❌ Этот профиль сервера ещё не настроен в Dashboard.", ephemeral=True)
+            return
         last_iso = storage.DATA["join_cooldowns"].get(str(interaction.user.id))
+        remaining = 0
         if last_iso:
             try:
                 remaining = max(0.0, config.JOIN_APPLICATION_COOLDOWN_SECONDS - (utils.now() - utils.parse_stored_datetime(last_iso)).total_seconds())
             except ValueError:
-                remaining = 0
-        else:
-            remaining = 0
+                pass
         if remaining > 0:
             await interaction.response.send_message(f"⏳ Подавать заявку можно не чаще раза в {config.JOIN_APPLICATION_COOLDOWN_SECONDS // 60} мин. Попробуйте снова через {int(remaining)} сек.", ephemeral=True)
             return
-        if not database_server_exists(interaction.guild.id, server):
-            await interaction.response.send_message("❌ Этот профиль сервера ещё не настроен в Dashboard.", ephemeral=True)
+        if not database.has_consent(interaction.guild.id, interaction.user.id):
+            async def accepted(i):
+                await i.response.send_modal(JoinModal(database.get_server_config(i.guild.id, server).get("name", server)))
+            async def declined(i):
+                await i.response.send_message("Заявка не создана: вы не дали согласие на системные уведомления.", ephemeral=True)
+            await interaction.response.send_message(consent_text(), view=NotificationConsentView(accepted, declined), ephemeral=True)
             return
-        modal = JoinModal(server)
-        await interaction.response.send_modal(modal)
-
-
-def database_server_exists(guild_id, server):
-    return bool(utils.server_config(guild_id, server))
+        await interaction.response.send_modal(JoinModal(database.get_server_config(interaction.guild.id, server).get("name", server)))
 
 
 async def create_join_ticket(interaction: discord.Interaction, server: str, form: dict):
@@ -122,11 +121,11 @@ class ObzvonChannelSelectView(discord.ui.View):
 
     async def on_select(self, interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
-        _, message = await call_to_obzvon(interaction.guild, self.number, int(interaction.data["values"][0]))
+        _, message = await call_to_obzvon(interaction.guild, self.number, int(interaction.data["values"][0]), interaction.user)
         await interaction.followup.send(message, ephemeral=True)
 
 
-async def call_to_obzvon(guild: discord.Guild, number: str, channel_id: int):
+async def call_to_obzvon(guild: discord.Guild, number: str, channel_id: int, clicker: discord.Member | None = None):
     app = storage.DATA["applications"].get(number)
     if app is None or app.get("guild_id", guild.id) != guild.id:
         return False, f"Заявка `{number}` не найдена на этом сервере."
@@ -145,5 +144,6 @@ async def call_to_obzvon(guild: discord.Guild, number: str, channel_id: int):
     await storage.persist()
     ticket_channel = guild.get_channel(app["channel_id"])
     if ticket_channel:
-        await ticket_channel.send(f"📞 {applicant.mention}, вас вызвали на обзвон! Пожалуйста, зайдите в канал {call_channel.mention}.")
+        caller = f" {clicker.mention}" if clicker else ""
+        await ticket_channel.send(f"📞 {applicant.mention}, вас вызвал(а) на обзвон{caller}! Пожалуйста, зайдите в канал {call_channel.mention}.")
     return True, f"Заявитель вызван на обзвон в {call_channel.mention}, роль обзвона выдана."
