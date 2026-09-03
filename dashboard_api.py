@@ -20,7 +20,7 @@ ADMINISTRATOR = 1 << 3
 
 def _auth(request):
     if config.API_SECRET and request.headers.get("X-Blin-Secret") == config.API_SECRET:
-        return {"dev": True}
+        return {"dev": True, "user": {"id": "dev"}}
     return SESSIONS.get(request.cookies.get("blin_session"))
 
 
@@ -30,6 +30,12 @@ def _guild(bot, request):
 
 
 def _error(message, status=400): return web.json_response({"error": message}, status=status)
+
+
+def _is_site_admin(session):
+    if not session or session.get("dev"): return bool(session and session.get("dev"))
+    user = session.get("user") or {}
+    return str(user.get("id", "")) in config.SITE_ADMIN_IDS
 
 
 def _can_manage_guild(session, guild_id):
@@ -72,7 +78,8 @@ def create_app(bot):
 
     @web.middleware
     async def auth(request, handler):
-        if request.path in {"/", "/health", "/auth/discord", "/auth/callback"} or request.method == "OPTIONS": return await handler(request)
+        public = {"/", "/health", "/auth/discord", "/auth/callback"}
+        if request.path in public or request.method == "OPTIONS": return await handler(request)
         session = _auth(request)
         if not session: return _error("unauthorized", 401)
         request["blin_session"] = session
@@ -81,9 +88,9 @@ def create_app(bot):
     app = web.Application(middlewares=[cors, auth])
 
     async def root(request):
-        return web.json_response({"service": "Blin Bot API", "status": "online", "api_version": 3, "dashboard": "ready", "health": "/health"})
+        return web.json_response({"service": "Blin Bot API", "status": "online", "api_version": 4, "dashboard": "ready", "health": "/health"})
 
-    async def health(request): return web.json_response({"ok": True, "service": "blin-bot", "api_version": 3})
+    async def health(request): return web.json_response({"ok": True, "service": "blin-bot", "api_version": 4})
 
     async def auth_discord(request):
         if not config.DISCORD_CLIENT_ID or not config.DISCORD_REDIRECT_URI: return _error("Discord OAuth2 is not configured", 503)
@@ -112,19 +119,27 @@ def create_app(bot):
         session_id = secrets.token_urlsafe(32); SESSIONS[session_id] = {"user": user, "guild_permissions": allowed}
         target = os.getenv("BLIN_DASHBOARD_URL", "/dashboard.html")
         response = web.HTTPFound(target)
-        # Dashboard is normally hosted on another HTTPS origin (e.g. GitHub Pages),
-        # so the session cookie must be usable by credentialed cross-origin requests.
         response.set_cookie("blin_session", session_id, httponly=True, secure=True, samesite="None", max_age=86400)
         return response
 
     async def auth_me(request):
         session = request["blin_session"]
-        return web.json_response({"user": session.get("user"), "guild_ids": list(session.get("guild_permissions", {}).keys())})
+        return web.json_response({"user": session.get("user"), "guild_ids": list(session.get("guild_permissions", {}).keys()), "site_admin": _is_site_admin(session)})
 
     async def auth_logout(request):
         token = request.cookies.get("blin_session")
         if token: SESSIONS.pop(token, None)
         response = web.json_response({"ok": True}); response.del_cookie("blin_session"); return response
+
+    async def admin(request):
+        session = request["blin_session"]
+        if not _is_site_admin(session): return _error("forbidden", 403)
+        return web.json_response({
+            "ok": True,
+            "admin": {"user_id": str(session.get("user", {}).get("id", "dev")), "name": session.get("user", {}).get("global_name") or session.get("user", {}).get("username") or "Developer"},
+            "bot": {"online": not bot.is_closed(), "user_id": bot.user.id if bot.user else None, "guild_count": len(bot.guilds)},
+            "configuration": {"configured_admin_count": len(config.SITE_ADMIN_IDS), "api_version": 4},
+        })
 
     async def guilds(request):
         session = request["blin_session"]
@@ -219,7 +234,7 @@ def create_app(bot):
         database.set_consent(guild.id, user_id, enabled); return web.json_response({"ok": True, "enabled": enabled})
 
     app.add_routes([
-        web.get("/", root), web.get("/health", health), web.get("/auth/discord", auth_discord), web.get("/auth/callback", auth_callback), web.get("/api/me", auth_me), web.post("/api/logout", auth_logout),
+        web.get("/", root), web.get("/health", health), web.get("/auth/discord", auth_discord), web.get("/auth/callback", auth_callback), web.get("/api/me", auth_me), web.post("/api/logout", auth_logout), web.get("/api/admin", admin),
         web.get("/api/guilds", guilds), web.get("/api/guilds/{guild_id}/objects", objects), web.get("/api/guilds/{guild_id}/config", cfg), web.put("/api/guilds/{guild_id}/config", cfg),
         web.get("/api/guilds/{guild_id}/modules", modules), web.put("/api/guilds/{guild_id}/modules", modules), web.get("/api/guilds/{guild_id}/contracts", contracts), web.post("/api/guilds/{guild_id}/contracts", contracts),
         web.post("/api/guilds/{guild_id}/contracts/{contract_id}/publish", publish_contract), web.post("/api/guilds/{guild_id}/provision", provision), web.get("/api/guilds/{guild_id}/warnings", warnings),
