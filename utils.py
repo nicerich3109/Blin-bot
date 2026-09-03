@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Runtime Discord configuration and shared helpers."""
+"""Runtime Discord configuration and shared helpers.
+
+Discord object IDs are data, never source-code constants. The active guild
+context is task-local, so multiple Discord servers can be handled concurrently
+without one server overwriting another server's configuration.
+"""
 import re
+from contextvars import ContextVar
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -8,35 +14,60 @@ import discord
 
 import config
 import database
-from logger_setup import logger
 
-# These are logical labels only. They are not Discord IDs. Their Discord
-# objects are selected from each guild's Dashboard configuration at runtime.
 SERVER_NAMES = {"DN": "Denver", "PHX": "Phoenix"}
-RECRUIT_ROLES = {"DN": (), "PHX": ()}
-TICKET_CATEGORIES = {"DN": None, "PHX": None}
-TICKET_ARCHIVE_CATEGORIES = {"DN": None, "PHX": None}
-LOGS_CHANNELS = {"DN": None, "PHX": None}
-NEW_MEMBER_ROLES = {"DN": None, "PHX": None}
-JOIN_SERVER_ROLES = {"DN": None, "PHX": None}
-VACATION_CHANNELS = {"DN": None, "PHX": None}
-VACATION_ROLES = {"DN": None, "PHX": None}
-OBZVON_ROLES = {"DN": None, "PHX": None}
-OBZVON_CHANNELS = {"DN": [], "PHX": []}
+_current_guild_id: ContextVar[int | None] = ContextVar("blin_guild_id", default=None)
+
+
+class RuntimeMap:
+    """Compatibility mapping resolving settings from the active guild."""
+    def __init__(self, key: str, many: bool = False):
+        self.key = key
+        self.many = many
+
+    def _value(self, server):
+        gid = _current_guild_id.get()
+        if gid is None:
+            return [] if self.many else None
+        return object_ids(gid, server, self.key) if self.many else object_id(gid, server, self.key)
+
+    def __getitem__(self, server):
+        return self._value(server)
+
+    def get(self, server, default=None):
+        value = self._value(server)
+        return default if value is None else value
+
+
+RECRUIT_ROLES = RuntimeMap("recruit_roles", many=True)
+TICKET_CATEGORIES = RuntimeMap("ticket_category")
+TICKET_ARCHIVE_CATEGORIES = RuntimeMap("ticket_archive_category")
+LOGS_CHANNELS = RuntimeMap("logs_channel")
+NEW_MEMBER_ROLES = RuntimeMap("new_member_role")
+JOIN_SERVER_ROLES = RuntimeMap("join_server_role")
+VACATION_CHANNELS = RuntimeMap("vacation_channel")
+VACATION_ROLES = RuntimeMap("vacation_role")
+OBZVON_ROLES = RuntimeMap("obzvon_role")
+OBZVON_CHANNELS = RuntimeMap("obzvon_channels", many=True)
+
+
+def set_current_guild(guild_id: int):
+    return _current_guild_id.set(guild_id)
+
+
+def reset_current_guild(token):
+    _current_guild_id.reset(token)
 
 
 def guild_config(guild_id: int) -> dict:
-    """Return the complete configuration for one Discord guild."""
     return database.get_config(guild_id)
 
 
 def server_config(guild_id: int, server: str) -> dict:
-    """Return one logical server/profile configuration for a guild."""
     return guild_config(guild_id).get("servers", {}).get(server, {})
 
 
 def object_id(guild_id: int, server: str, key: str):
-    """Resolve a configured Discord object ID without embedding it in code."""
     value = server_config(guild_id, server).get(key)
     try:
         return int(value) if value is not None else None
@@ -58,26 +89,8 @@ def object_ids(guild_id: int, server: str, key: str) -> list[int]:
 
 
 def refresh_runtime_config(guild_id=None):
-    """Refresh compatibility mappings for legacy modules.
-
-    New code should prefer server_config/object_id so multiple guilds cannot
-    overwrite each other's runtime settings.
-    """
-    if guild_id is None:
-        return
-    raw = database.get_config(guild_id)
-    for server in SERVER_NAMES:
-        s = raw.get("servers", {}).get(server, {})
-        RECRUIT_ROLES[server] = tuple(object_ids(guild_id, server, "recruit_roles"))
-        TICKET_CATEGORIES[server] = object_id(guild_id, server, "ticket_category")
-        TICKET_ARCHIVE_CATEGORIES[server] = object_id(guild_id, server, "ticket_archive_category")
-        LOGS_CHANNELS[server] = object_id(guild_id, server, "logs_channel")
-        NEW_MEMBER_ROLES[server] = object_id(guild_id, server, "new_member_role")
-        JOIN_SERVER_ROLES[server] = object_id(guild_id, server, "join_server_role")
-        VACATION_CHANNELS[server] = object_id(guild_id, server, "vacation_channel")
-        VACATION_ROLES[server] = object_id(guild_id, server, "vacation_role")
-        OBZVON_ROLES[server] = object_id(guild_id, server, "obzvon_role")
-        OBZVON_CHANNELS[server] = object_ids(guild_id, server, "obzvon_channels")
+    """Legacy no-op kept for compatibility; settings are resolved per task."""
+    return None
 
 
 def is_module_enabled(guild_id: int, module: str) -> bool:
@@ -129,7 +142,8 @@ def parse_ten_minute_time(raw):
 def is_recruiter(member, server):
     if member.guild_permissions.administrator:
         return True
-    return bool({r.id for r in member.roles} & set(RECRUIT_ROLES.get(server, ())))
+    allowed = object_ids(member.guild.id, server, "recruit_roles")
+    return bool({r.id for r in member.roles} & set(allowed))
 
 
 def is_vacation_staff(member):
