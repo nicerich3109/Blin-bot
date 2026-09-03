@@ -1,88 +1,19 @@
-
 import os
 
-# ============================ ТОКЕН / ГИЛЬДИЯ ============================
+# Runtime-only settings. Discord object IDs are stored in SQLite and edited via the web API.
+TOKEN = os.getenv("DISCORD_TOKEN", "")
+GUILD_ID = int(os.getenv("BLIN_GUILD_ID", "0")) or None
+DATA_FILE = os.getenv("BLIN_LEGACY_DATA_FILE", "data.json")
+LOG_FILE = os.getenv("BLIN_LOG_FILE", "bot.log")
+DB_PATH = os.getenv("BLIN_DB_PATH", "blin.sqlite3")
+API_HOST = os.getenv("BLIN_API_HOST", "127.0.0.1")
+API_PORT = int(os.getenv("BLIN_API_PORT", "8080"))
+API_SECRET = os.getenv("BLIN_API_SECRET", "")
+VACATION_TIMEZONE = os.getenv("BLIN_TIMEZONE", "Europe/Moscow")
+JOIN_APPLICATION_COOLDOWN_SECONDS = int(os.getenv("BLIN_JOIN_COOLDOWN", "120"))
 
-TOKEN = os.getenv("DISCORD_TOKEN", "ВСТАВЬТЕ_ТОКЕН_СЮДА")
+RECRUIT_INFO_TEXT = "Мы подарим тебе адекватную компанию, нацеленную как на улучшение самого себя, так и на улучшение и создание контента в игре.\n\nВыбери сервер, чтобы подать заявку на вступление!"
+VACATION_INFO_TEXT = "Откинули в бан? Или уезжаете в РЛ по делам? Подай заявку, чтобы мы всегда знали, что ты не пропал.\n\nНажми на кнопку ниже, чтобы подать заявку на отпуск!"
 
-# Если указать ID сервера — слэш-команды синхронизируются мгновенно
-# только на нём (удобно при разработке). Если None — команды
-# синхронизируются глобально (до 1 часа).
-GUILD_ID = None  # например: 123456789012345678
-
-# ============================ КАНАЛЫ И РАЗДЕЛЫ ===========================
-
-RECRUIT_INFO_CATEGORY = 1372267300408791095   # раздел с сообщением "Подать заявку" (вступление)
-RECRUIT_INFO_CHANNEL = 1372267300849320037    # канал с сообщением "Подать заявку" (вступление)
-TICKET_CATEGORY_DN = 1410973810550636544      # раздел для тикетов-заявок Denver
-TICKET_CATEGORY_PHX = 1525185739896393809     # раздел для тикетов-заявок Phoenix
-TICKET_ARCHIVE_CATEGORY_DN = 1543674967881941093   # архив заявок Denver
-TICKET_ARCHIVE_CATEGORY_PHX = 1543674852676735128  # архив заявок Phoenix
-LOGS_CHANNEL_DN = 1372271047096926278         # канал логов заявок Denver (вступление + отпуск)
-LOGS_CHANNEL_PHX = 1525206273081999542        # канал логов заявок Phoenix (вступление + отпуск)
-VACATION_CATEGORY_DN = 1372267301159567571    # раздел с заявками на отпуск Denver
-VACATION_CHANNEL_DN = 1372267301159567578     # канал с заявками на отпуск Denver
-VACATION_CATEGORY_PHX = 1525151395026833488   # раздел с заявками на отпуск Phoenix
-VACATION_CHANNEL_PHX = 1525152733601202277    # канал с заявками на отпуск Phoenix
-
-# ================================== РОЛИ =================================
-
-RECRUIT_DN = 1372267300366979230        # Recrut Blin DN
-CHIEF_RECRUIT_DN = 1410714327773745222  # Chief Recrut Blin DN
-RECRUIT_PHX = 1525147233228685353       # Recrut Blin PHX
-CHIEF_RECRUIT_PHX = 1525147059672580187 # Chief Recrut Blin PHX
-NEW_MEMBER_DN = 1372267300366979228     # роль нового участника Denver
-NEW_MEMBER_PHX = 1525147604227198976    # роль нового участника Phoenix
-JOIN_SERVER_ROLE_DN = 1543544272559808573   # роль, выдаваемая при одобрении заявки Denver
-JOIN_SERVER_ROLE_PHX = 1543543788939509791  # роль, выдаваемая при одобрении заявки Phoenix
-VACATION_ROLE_DN = 1525217493138935978  # роль "в отпуске" Denver
-VACATION_ROLE_PHX = 1525219966616600607 # роль "в отпуске" Phoenix
-
-# Роль, которая выдаётся заявителю после того, как его вызвали на
-# обзвон (кнопка "Обзвон" на заявке вступления). Даёт видимость канала
-# обзвона на соответствующем сервере.
-OBZVON_ROLE_DN = 1532735084405456968
-OBZVON_ROLE_PHX = 1532735239066095777
-
-# Голосовые каналы обзвона — по два на сервер. При нажатии "Обзвон"
-# сотрудник выбирает один из них, после чего заявителю выдаётся роль
-# обзвона соответствующего сервера и приходит уведомление с каналом.
-OBZVON_CHANNELS_DN = [1372935983288418364, 1425542308303994971]
-OBZVON_CHANNELS_PHX = [1525229147516047450, 1525229175865348137]
-
-# Роли, которым разрешено принимать/отклонять заявки на отпуск.
-# По умолчанию — те же рекрутёры/чиф-рекрутёры, что и по заявкам на
-# вступление. При необходимости добавьте сюда ID роли "High Staff".
-VACATION_STAFF_ROLES = [RECRUIT_DN, CHIEF_RECRUIT_DN, RECRUIT_PHX, CHIEF_RECRUIT_PHX]
-
-# ================================ ТЕКСТЫ ==================================
-
-RECRUIT_INFO_TEXT = (
-    "Мы подарим тебе адекватную компанию, нацеленную как на улучшение "
-    "самого себя, так и на улучшение и создание контента в игре.\n\n"
-    "Выбери сервер, чтобы подать заявку на вступление!"
-)
-
-VACATION_INFO_TEXT = (
-    "Откинули в бан? Или уезжаете в РЛ по делам? Подай заявку, чтобы мы "
-    "всегда знали, что ты не пропал.\n\nНажми на кнопку ниже, чтобы "
-    "подать заявку на отпуск!"
-)
-
-# ================================ ПРОЧЕЕ ==================================
-
-DATA_FILE = "data.json"
-LOG_FILE = "bot.log"
-
-# Задержка перед архивированием обработанной заявки.
-# 0 — архивирование выполняется сразу после публикации результата.
-TICKET_DELETE_DELAY_SECONDS = 0
-
-# Часовой пояс, в котором участники указывают дату/время окончания отпуска.
-# Без явной зоны naive datetime на сервере в UTC сравнивается с локальным
-# временем пользователей неверно — отпуск мог не закрываться вовремя.
-VACATION_TIMEZONE = "Europe/Moscow"
-
-# Кулдаун на подачу заявки на вступление (в секундах) — чтобы нельзя
-# было спамить заявками. Отсчитывается с момента успешной подачи заявки.
-JOIN_APPLICATION_COOLDOWN_SECONDS = 120
+# Only logical module names live in source code; their Discord objects are selected at runtime.
+MODULES = ("applications", "vacations", "contracts", "discipline", "dm_notifications", "reaction_roles")
