@@ -2,8 +2,6 @@
 
 Blin Bot is a Discord automation bot built around a **Dashboard-first** configuration model.
 
-The long-term architecture is:
-
 ```text
 Discord user
      │
@@ -16,54 +14,39 @@ Blin Dashboard ── Discord OAuth2 ──► Dashboard backend
                                       │
                                       ▼
                                   Discord API
-
-                    persistent configuration/state
-                              │
-                              ▼
+                                      │
+                                      ▼
                          SQLite / PostgreSQL
 ```
 
-## Important design rule
+## Architecture rules
 
-**Discord IDs are not configuration constants in the source code.**
-
-The bot discovers the current guild roles, channels and categories from Discord. The Dashboard displays them by name and stores the selected Discord IDs in the database as runtime configuration.
-
-This means the same bot build can serve multiple unrelated Discord servers without a separate code/config file for each server.
+- Discord object IDs are **runtime data**, never server-specific constants in Python source.
+- Every guild has its own configuration and module switches.
+- The Dashboard selects live roles, categories and channels by name; the selected IDs are stored only in the database.
+- The same bot build can serve multiple unrelated Discord servers.
+- Discord permissions and role hierarchy remain authoritative.
 
 ## Modules
 
-The bot is being split into independently configurable modules:
+- `applications` — recruitment applications, tickets and recruiter calls;
+- `vacations` — vacation requests, active list and automatic expiry;
+- `contracts` — configurable contract/bonus forms;
+- `discipline` — strict-warning workflow and history;
+- `dm_notifications` — explicit opt-in system DMs;
+- `reaction_roles` — configurable role-button configurations.
 
-- applications — recruitment applications and tickets;
-- vacations — vacation requests, active vacation list and automatic expiry;
-- contracts — configurable contract/bonus forms;
-- discipline — strict-warning workflow and history;
-- dm_notifications — opt-in direct-message notifications;
-- reaction_roles — configurable role buttons.
-
-Module state is stored per guild and can be enabled/disabled through the Dashboard API.
+Modules are enabled/disabled per guild through the Dashboard API.
 
 ## Database
 
-`database.py` is the persistent configuration layer. The default backend is SQLite for simple deployment and development.
+`database.py` is the persistence/configuration layer. SQLite is the default local backend; the API boundary is intentionally storage-agnostic so production deployment can move to PostgreSQL.
 
-The database stores:
-
-- guilds and their enabled state;
-- per-guild Discord configuration;
-- module switches and module settings;
-- persistent bot state;
-- DM consent;
-- contract blocks;
-- disciplinary warning history;
-- reaction-role configurations.
-
-If an existing installation has `data.json`, the compatibility layer can import it once into the database.
+Stored data includes guild configuration, module settings, bot state, DM consent, contracts, disciplinary history and reaction-role configurations. The legacy `data.json` is imported by the compatibility storage layer when no database state exists.
 
 ## Dashboard API
 
-The bot exposes a small JSON API for the Dashboard:
+The bot exposes:
 
 - `GET /health`
 - `GET /api/guilds`
@@ -71,33 +54,35 @@ The bot exposes a small JSON API for the Dashboard:
 - `GET|PUT /api/guilds/{guild_id}/config`
 - `GET|PUT /api/guilds/{guild_id}/modules`
 - `GET|POST /api/guilds/{guild_id}/contracts`
+- `POST /api/guilds/{guild_id}/contracts/{contract_id}/publish`
+- `POST /api/guilds/{guild_id}/provision`
 - `GET /api/guilds/{guild_id}/warnings`
 - `GET|POST /api/guilds/{guild_id}/reaction-roles`
 - `PUT /api/guilds/{guild_id}/consent`
 
-For development the API can be protected with `X-Blin-Secret`. **Do not put this secret into browser JavaScript.** Production authentication is intended to use Discord OAuth2 in a Dashboard backend, which then calls the bot API server-to-server.
+For development the API can use `X-Blin-Secret`. **Never expose this secret to browser JavaScript.** Production Dashboard authentication should be Discord OAuth2 in the Dashboard backend, which calls the bot API server-to-server. Discord documents OAuth2 scopes and permission handling separately from bot authorization. citeturn0search9turn0search4
 
-## Environment
+## Server provisioning
 
-Copy `.env.example` and set at least:
+`provisioning.py` provides Dashboard-driven creation of missing roles, categories and text channels from a blueprint. Existing objects are reused and nothing is deleted automatically.
+
+## Discord safety
+
+The bot does not attempt to bypass Discord restrictions. System DMs require explicit consent and delivery failures are handled normally. Role operations remain subject to Discord's role hierarchy: a bot can grant a role only when that role is below the bot's highest role. citeturn0search2
+
+## Configuration
+
+Copy `.env.example` and set at minimum:
 
 ```text
 DISCORD_TOKEN=...
 BLIN_API_SECRET=...
 ```
 
-Optional settings include the database path, API host/port, allowed frontend origins, timezone and Discord OAuth2 credentials.
+Optional values configure the database path, API listener, CORS origins, timezone and server-side Discord OAuth2 credentials.
 
-## Server provisioning
+## Status
 
-`provisioning.py` contains the safe foundation for Dashboard-driven server setup. It creates only missing roles/categories/text channels described by a blueprint and never deletes existing Discord objects.
+The bot foundation is now Dashboard-first: guild-scoped configuration, persistent storage, module switches, provisioning and an API boundary are in place. Existing recruitment/vacation flows use runtime configuration, and processed recruitment tickets are archived instead of deleted with applicant access removed.
 
-The Dashboard can therefore provide a guided "Create structure" workflow without requiring an administrator to copy Discord IDs into configuration.
-
-## Discord safety
-
-The bot does not attempt to bypass Discord restrictions. Direct messages are opt-in and delivery failures are handled as normal failures. Discord permissions and role hierarchy remain authoritative.
-
-## Current status
-
-The repository is in the migration phase from the original Discord-configured implementation to the Dashboard-first architecture. Existing application/vacation workflows are retained while their configuration is progressively moved behind the runtime configuration layer.
+The next repository is `Blin-website`, which will become the user-facing Dashboard over this API.
