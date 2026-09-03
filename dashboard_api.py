@@ -81,13 +81,7 @@ def create_app(bot):
     app = web.Application(middlewares=[cors, auth])
 
     async def root(request):
-        return web.json_response({
-            "service": "Blin Bot API",
-            "status": "online",
-            "api_version": 3,
-            "dashboard": "ready",
-            "health": "/health",
-        })
+        return web.json_response({"service": "Blin Bot API", "status": "online", "api_version": 3, "dashboard": "ready", "health": "/health"})
 
     async def health(request): return web.json_response({"ok": True, "service": "blin-bot", "api_version": 3})
 
@@ -118,7 +112,9 @@ def create_app(bot):
         session_id = secrets.token_urlsafe(32); SESSIONS[session_id] = {"user": user, "guild_permissions": allowed}
         target = os.getenv("BLIN_DASHBOARD_URL", "/dashboard.html")
         response = web.HTTPFound(target)
-        response.set_cookie("blin_session", session_id, httponly=True, secure=True, samesite="Lax", max_age=86400)
+        # Dashboard is normally hosted on another HTTPS origin (e.g. GitHub Pages),
+        # so the session cookie must be usable by credentialed cross-origin requests.
+        response.set_cookie("blin_session", session_id, httponly=True, secure=True, samesite="None", max_age=86400)
         return response
 
     async def auth_me(request):
