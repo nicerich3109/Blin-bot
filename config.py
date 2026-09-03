@@ -7,16 +7,18 @@ DATA_FILE = os.getenv("BLIN_LEGACY_DATA_FILE", "/app/data/data.json")
 LOG_FILE = os.getenv("BLIN_LOG_FILE", "/app/data/bot.log")
 DB_PATH = os.getenv("BLIN_DB_PATH", "/app/data/blin.sqlite3")
 API_HOST = os.getenv("BLIN_API_HOST", "0.0.0.0")
-# Bothost exposes the public web-service port through PORT.
 API_PORT = int(os.getenv("PORT", os.getenv("BLIN_API_PORT", "3000")))
 API_SECRET = os.getenv("BLIN_API_SECRET", "")
 API_ALLOWED_ORIGINS = os.getenv("BLIN_API_ALLOWED_ORIGINS", "")
 
-# Reserved for the Dashboard OAuth2 backend. The client secret must only live
-# on the server; it must never be shipped to browser JavaScript.
+# Dashboard OAuth2. Keep the client secret server-side only.
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID", "")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
 DISCORD_REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI", "")
+# Site administrators are configured on the backend, never in frontend JS.
+SITE_ADMIN_IDS = {
+    value.strip() for value in os.getenv("BLIN_SITE_ADMIN_IDS", "").split(",") if value.strip()
+}
 
 VACATION_TIMEZONE = os.getenv("BLIN_TIMEZONE", "Europe/Moscow")
 JOIN_APPLICATION_COOLDOWN_SECONDS = int(os.getenv("BLIN_JOIN_COOLDOWN", "120"))
