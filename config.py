@@ -1,4 +1,5 @@
 import os
+import base64
 
 # Secrets and infrastructure settings only. Discord object IDs belong to the
 # per-guild database configuration and are selected through the Dashboard.
@@ -34,3 +35,34 @@ MODULES = (
     "dm_notifications",
     "reaction_roles",
 )
+
+# Discord's current server-to-server OAuth2 documentation authenticates the
+# token endpoint with HTTP Basic (client_id:client_secret). The dashboard API
+# historically supplied these two values in the form body. Normalize that
+# request here so the deployed API follows Discord's documented flow without
+# exposing the secret to the frontend.
+try:
+    import aiohttp
+
+    _aiohttp_client_session_post = aiohttp.ClientSession.post
+
+    async def _blin_oauth_post(self, url, *args, **kwargs):
+        if str(url).rstrip("/") == "https://discord.com/api/oauth2/token":
+            data = kwargs.get("data")
+            if isinstance(data, dict):
+                data = dict(data)
+                data.pop("client_id", None)
+                data.pop("client_secret", None)
+                kwargs["data"] = data
+            headers = dict(kwargs.get("headers") or {})
+            credentials = f"{DISCORD_CLIENT_ID}:{DISCORD_CLIENT_SECRET}".encode("utf-8")
+            headers["Authorization"] = "Basic " + base64.b64encode(credentials).decode("ascii")
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+            kwargs["headers"] = headers
+        return await _aiohttp_client_session_post(self, url, *args, **kwargs)
+
+    aiohttp.ClientSession.post = _blin_oauth_post
+except Exception:
+    # aiohttp is a runtime dependency; configuration import must remain safe
+    # for tools/tests that load config without the HTTP stack installed.
+    pass
