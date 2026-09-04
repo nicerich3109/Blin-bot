@@ -24,14 +24,28 @@ class BlinBot(commands.Bot):
         for vac_id, vac in storage.DATA["vacations"].items():
             if vac.get("status") == "pending":
                 self.add_view(RequestDecisionView("vacation", vac_id))
+
         register_commands(self)
-        await self.tree.sync()
+
+        # Start the HTTP API BEFORE Discord command synchronization.
+        # Discord can temporarily rate-limit tree.sync() (HTTP 429). If sync()
+        # blocks while retrying, Bothost must still be able to reach the API
+        # port; otherwise its reverse proxy reports "Bad Gateway".
         try:
             self.dashboard_runner = await start_api(self)
             logger.info("Dashboard API запущен на %s:%s", config.API_HOST, config.API_PORT)
         except Exception:
             logger.exception("Не удалось запустить Dashboard API на %s:%s", config.API_HOST, config.API_PORT)
             raise
+
+        try:
+            await self.tree.sync()
+            logger.info("Discord slash-команды синхронизированы")
+        except Exception:
+            # A Discord API rate limit or temporary error must not take down
+            # the dashboard/API. The bot can remain online and retry on the
+            # next deployment/restart.
+            logger.exception("Не удалось синхронизировать Discord slash-команды")
 
 
 bot = BlinBot(command_prefix="!", intents=intents)
