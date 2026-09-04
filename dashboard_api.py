@@ -6,7 +6,7 @@ import logging
 from urllib.parse import urlencode
 
 import discord
-from aiohttp import web, ClientSession
+from aiohttp import web, ClientSession, BasicAuth
 
 import config
 import database
@@ -91,9 +91,9 @@ def create_app(bot):
     app = web.Application(middlewares=[cors, auth])
 
     async def root(request):
-        return web.json_response({"service": "Blin Bot API", "status": "online", "api_version": 6, "dashboard": "ready", "health": "/health"})
+        return web.json_response({"service": "Blin Bot API", "status": "online", "api_version": 7, "dashboard": "ready", "health": "/health"})
 
-    async def health(request): return web.json_response({"ok": True, "service": "blin-bot", "api_version": 6})
+    async def health(request): return web.json_response({"ok": True, "service": "blin-bot", "api_version": 7})
 
     async def auth_discord(request):
         if not config.DISCORD_CLIENT_ID or not config.DISCORD_REDIRECT_URI: return _error("Discord OAuth2 is not configured", 503)
@@ -125,8 +125,6 @@ def create_app(bot):
             return _error("Discord OAuth2 is not configured", 503)
 
         token_payload = {
-            "client_id": config.DISCORD_CLIENT_ID,
-            "client_secret": config.DISCORD_CLIENT_SECRET,
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": config.DISCORD_REDIRECT_URI,
@@ -134,9 +132,10 @@ def create_app(bot):
         try:
             async with ClientSession() as session:
                 async with session.post(
-                    "https://discord.com/api/oauth2/token",
+                    "https://discord.com/api/v10/oauth2/token",
                     data=token_payload,
                     headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    auth=BasicAuth(config.DISCORD_CLIENT_ID, config.DISCORD_CLIENT_SECRET),
                 ) as response:
                     if response.status != 200:
                         try: error_body = await response.text()
@@ -185,7 +184,7 @@ def create_app(bot):
     async def admin(request):
         session = request["blin_session"]
         if not _is_site_admin(session): return _error("forbidden", 403)
-        return web.json_response({"ok": True, "admin": {"user_id": str(session.get("user", {}).get("id", "dev")), "name": session.get("user", {}).get("global_name") or session.get("user", {}).get("username") or "Developer"}, "bot": {"online": not bot.is_closed(), "user_id": bot.user.id if bot.user else None, "guild_count": len(bot.guilds)}, "configuration": {"configured_admin_count": len(config.SITE_ADMIN_IDS), "api_version": 6}})
+        return web.json_response({"ok": True, "admin": {"user_id": str(session.get("user", {}).get("id", "dev")), "name": session.get("user", {}).get("global_name") or session.get("user", {}).get("username") or "Developer"}, "bot": {"online": not bot.is_closed(), "user_id": bot.user.id if bot.user else None, "guild_count": len(bot.guilds)}, "configuration": {"configured_admin_count": len(config.SITE_ADMIN_IDS), "api_version": 7}})
 
     async def guilds(request):
         session = request["blin_session"]
