@@ -28,22 +28,35 @@ def _auth(request):
 
 
 def _guild(bot, request):
-    try: return bot.get_guild(int(request.match_info["guild_id"]))
-    except (KeyError, TypeError, ValueError): return None
+    """Resolve a guild from the live bot cache.
+
+    Dashboard guild IDs come from /api/guilds, so a cache miss normally means
+    the bot has left/unavailable guild. Keep this helper strict rather than
+    silently returning data for a guild the bot cannot actually manage.
+    """
+    try:
+        guild_id = int(request.match_info["guild_id"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return bot.get_guild(guild_id)
 
 
-def _error(message, status=400): return web.json_response({"error": message}, status=status)
+def _error(message, status=400):
+    return web.json_response({"error": message}, status=status)
 
 
 def _is_site_admin(session):
-    if not session or session.get("dev"): return bool(session and session.get("dev"))
+    if not session or session.get("dev"):
+        return bool(session and session.get("dev"))
     user = session.get("user") or {}
     return str(user.get("id", "")) in config.SITE_ADMIN_IDS
 
 
 def _can_manage_guild(session, guild_id):
-    if session and session.get("dev"): return True
-    if not session: return False
+    if session and session.get("dev"):
+        return True
+    if not session:
+        return False
     permissions = int(session.get("guild_permissions", {}).get(str(guild_id), 0))
     return bool(permissions & (MANAGE_GUILD | ADMINISTRATOR))
 
@@ -91,21 +104,16 @@ def create_app(bot):
     app = web.Application(middlewares=[cors, auth])
 
     async def root(request):
-        return web.json_response({"service": "Blin Bot API", "status": "online", "api_version": 8, "dashboard": "ready", "health": "/health"})
+        return web.json_response({"service": "Blin Bot API", "status": "online", "api_version": 9, "dashboard": "ready", "health": "/health"})
 
-    async def health(request): return web.json_response({"ok": True, "service": "blin-bot", "api_version": 8})
+    async def health(request):
+        return web.json_response({"ok": True, "service": "blin-bot", "api_version": 9})
 
     async def auth_discord(request):
         if not config.DISCORD_CLIENT_ID or not config.DISCORD_REDIRECT_URI: return _error("Discord OAuth2 is not configured", 503)
         state = secrets.token_urlsafe(32)
         OAUTH_STATES.add(state)
-        params = {
-            "client_id": config.DISCORD_CLIENT_ID,
-            "response_type": "code",
-            "redirect_uri": config.DISCORD_REDIRECT_URI,
-            "scope": "identify guilds",
-            "state": state,
-        }
+        params = {"client_id": config.DISCORD_CLIENT_ID, "response_type": "code", "redirect_uri": config.DISCORD_REDIRECT_URI, "scope": "identify guilds", "state": state}
         response = web.HTTPFound("https://discord.com/oauth2/authorize?" + urlencode(params))
         response.set_cookie("blin_oauth_state", state, httponly=True, secure=True, samesite="None", max_age=600)
         return response
@@ -115,47 +123,22 @@ def create_app(bot):
         cookie_state = request.cookies.get("blin_oauth_state")
         code = request.query.get("code")
         state = query_state or cookie_state
-        if not code or not state or state not in OAUTH_STATES:
-            return _error("invalid_oauth_state", 400)
-        if query_state and cookie_state and query_state != cookie_state:
-            return _error("invalid_oauth_state", 400)
+        if not code or not state or state not in OAUTH_STATES: return _error("invalid_oauth_state", 400)
+        if query_state and cookie_state and query_state != cookie_state: return _error("invalid_oauth_state", 400)
         OAUTH_STATES.remove(state)
-
-        if not config.DISCORD_CLIENT_ID or not config.DISCORD_CLIENT_SECRET or not config.DISCORD_REDIRECT_URI:
-            return _error("Discord OAuth2 is not configured", 503)
-
-        token_payload = {
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": config.DISCORD_REDIRECT_URI,
-        }
+        if not config.DISCORD_CLIENT_ID or not config.DISCORD_CLIENT_SECRET or not config.DISCORD_REDIRECT_URI: return _error("Discord OAuth2 is not configured", 503)
+        token_payload = {"grant_type": "authorization_code", "code": code, "redirect_uri": config.DISCORD_REDIRECT_URI}
         try:
             async with ClientSession() as session:
-                # Use the generic request() method instead of session.post().
-                # Some deployments wrap/patch ClientSession.post with an async helper;
-                # using request() avoids the "coroutine was never awaited" failure.
-                async with session.request(
-                    "POST",
-                    "https://discord.com/api/v10/oauth2/token",
-                    data=token_payload,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    auth=BasicAuth(config.DISCORD_CLIENT_ID, config.DISCORD_CLIENT_SECRET),
-                ) as response:
+                async with session.request("POST", "https://discord.com/api/v10/oauth2/token", data=token_payload, headers={"Content-Type": "application/x-www-form-urlencoded"}, auth=BasicAuth(config.DISCORD_CLIENT_ID, config.DISCORD_CLIENT_SECRET)) as response:
                     if response.status != 200:
                         try: error_body = await response.text()
                         except Exception: error_body = "<unreadable>"
-                        logger.error(
-                            "Discord OAuth token exchange failed: status=%s body=%s redirect_uri=%s client_id=%s",
-                            response.status, error_body[:1000], config.DISCORD_REDIRECT_URI, config.DISCORD_CLIENT_ID,
-                        )
+                        logger.error("Discord OAuth token exchange failed: status=%s body=%s redirect_uri=%s client_id=%s", response.status, error_body[:1000], config.DISCORD_REDIRECT_URI, config.DISCORD_CLIENT_ID)
                         return _error("oauth_token_exchange_failed", 502)
                     token_data = await response.json()
-
                 access_token = token_data.get("access_token")
-                if not access_token:
-                    logger.error("Discord OAuth token response did not contain access_token")
-                    return _error("oauth_token_exchange_failed", 502)
-
+                if not access_token: return _error("oauth_token_exchange_failed", 502)
                 headers = {"Authorization": f"Bearer {access_token}"}
                 async with session.get("https://discord.com/api/users/@me", headers=headers) as response:
                     if response.status != 200: return _error("oauth_user_failed", 502)
@@ -166,7 +149,6 @@ def create_app(bot):
         except Exception:
             logger.exception("Unexpected Discord OAuth token exchange error")
             return _error("oauth_token_exchange_failed", 502)
-
         allowed = {str(g["id"]): int(g.get("permissions", "0")) for g in user_guilds if int(g.get("permissions", "0")) & (MANAGE_GUILD | ADMINISTRATOR)}
         session_id = secrets.token_urlsafe(32)
         SESSIONS[session_id] = {"user": user, "guild_permissions": allowed}
@@ -188,15 +170,29 @@ def create_app(bot):
     async def admin(request):
         session = request["blin_session"]
         if not _is_site_admin(session): return _error("forbidden", 403)
-        return web.json_response({"ok": True, "admin": {"user_id": str(session.get("user", {}).get("id", "dev")), "name": session.get("user", {}).get("global_name") or session.get("user", {}).get("username") or "Developer"}, "bot": {"online": not bot.is_closed(), "user_id": bot.user.id if bot.user else None, "guild_count": len(bot.guilds)}, "configuration": {"configured_admin_count": len(config.SITE_ADMIN_IDS), "api_version": 8}})
+        return web.json_response({"ok": True, "admin": {"user_id": str(session.get("user", {}).get("id", "dev")), "name": session.get("user", {}).get("global_name") or session.get("user", {}).get("username") or "Developer"}, "bot": {"online": not bot.is_closed(), "user_id": bot.user.id if bot.user else None, "guild_count": len(bot.guilds)}, "configuration": {"configured_admin_count": len(config.SITE_ADMIN_IDS), "api_version": 9}})
 
     async def guilds(request):
         session = request["blin_session"]
-        return web.json_response([{"id": g.id, "name": g.name, "member_count": g.member_count} for g in bot.guilds if database.guild_enabled(g.id) and _can_manage_guild(session, g.id)])
+        # Reconcile the persistent guild registry with the live Discord cache.
+        # This prevents stale/old guild IDs from being exposed to the frontend.
+        for g in bot.guilds:
+            try:
+                database.register_guild(g.id, g.name)
+            except Exception:
+                logger.exception("Не удалось зарегистрировать guild %s в БД", g.id)
+        result = [{"id": g.id, "name": g.name, "member_count": g.member_count} for g in bot.guilds if database.guild_enabled(g.id) and _can_manage_guild(session, g.id)]
+        logger.info("Dashboard guild list: user=%s bot_guilds=%s available=%s", (session.get("user") or {}).get("id", "dev"), [g.id for g in bot.guilds], [g["id"] for g in result])
+        return web.json_response(result)
 
     async def objects(request):
-        guild = _guild(bot, request)
-        if not guild: return _error("guild_not_found", 404)
+        guild_id_raw = request.match_info.get("guild_id")
+        try: guild_id = int(guild_id_raw)
+        except (TypeError, ValueError): return _error("invalid_guild_id", 400)
+        guild = bot.get_guild(guild_id)
+        if not guild:
+            logger.warning("Dashboard guild_not_found: requested=%s bot_guilds=%s", guild_id, [g.id for g in bot.guilds])
+            return _error("guild_not_found", 404)
         if not _can_manage_guild(request["blin_session"], guild.id): return _error("forbidden", 403)
         return web.json_response({"roles": [{"id": r.id, "name": r.name, "position": r.position, "managed": r.managed} for r in guild.roles if not r.managed], "categories": [{"id": c.id, "name": c.name, "position": c.position} for c in guild.categories], "channels": [{"id": c.id, "name": c.name, "type": str(c.type), "category_id": c.category_id} for c in guild.channels if not isinstance(c, discord.CategoryChannel)]})
 
@@ -287,7 +283,7 @@ def create_app(bot):
         web.get("/api/guilds", guilds), web.get("/api/guilds/{guild_id}/objects", objects), web.get("/api/guilds/{guild_id}/config", cfg), web.put("/api/guilds/{guild_id}/config", cfg),
         web.get("/api/guilds/{guild_id}/modules", modules), web.put("/api/guilds/{guild_id}/modules", modules), web.get("/api/guilds/{guild_id}/contracts", contracts), web.post("/api/guilds/{guild_id}/contracts", contracts),
         web.post("/api/guilds/{guild_id}/contracts/{contract_id}/publish", publish_contract), web.post("/api/guilds/{guild_id}/provision", provision), web.get("/api/guilds/{guild_id}/warnings", warnings),
-        web.get("/api/guilds/{guild_id}/reaction-roles", reaction_roles), web.post("/api/guilds/{guild_id}/reaction-roles", reaction_roles), web.put("/api/guilds/{guild_id}/consent", consent),
+        web.get("/api/guilds/{guild_id}/reaction-roles", reaction_roles), web.post("/api/guilds/{guild_id}/reaction-roles", reaction_roles), web.post("/api/guilds/{guild_id}/consent", consent),
     ])
     return app
 
@@ -295,7 +291,5 @@ def create_app(bot):
 async def start_api(bot):
     runner = web.AppRunner(create_app(bot))
     await runner.setup()
-    site = web.TCPSite(runner, config.API_HOST, config.API_PORT)
-    await site.start()
-    logger.info("Dashboard API запущен на %s:%s", config.API_HOST, config.API_PORT)
+    await web.TCPSite(runner, config.API_HOST, config.API_PORT).start()
     return runner
