@@ -28,12 +28,7 @@ def _auth(request):
 
 
 def _guild(bot, request):
-    """Resolve a guild from the live bot cache.
-
-    Dashboard guild IDs come from /api/guilds, so a cache miss normally means
-    the bot has left/unavailable guild. Keep this helper strict rather than
-    silently returning data for a guild the bot cannot actually manage.
-    """
+    """Resolve a guild from the live bot cache."""
     try:
         guild_id = int(request.match_info["guild_id"])
     except (KeyError, TypeError, ValueError):
@@ -170,19 +165,17 @@ def create_app(bot):
     async def admin(request):
         session = request["blin_session"]
         if not _is_site_admin(session): return _error("forbidden", 403)
-        return web.json_response({"ok": True, "admin": {"user_id": str(session.get("user", {}).get("id", "dev")), "name": session.get("user", {}).get("global_name") or session.get("user", {}).get("username") or "Developer"}, "bot": {"online": not bot.is_closed(), "user_id": bot.user.id if bot.user else None, "guild_count": len(bot.guilds)}, "configuration": {"configured_admin_count": len(config.SITE_ADMIN_IDS), "api_version": 9}})
+        return web.json_response({"ok": True, "admin": {"user_id": str(session.get("user", {}).get("id", "dev")), "name": session.get("user", {}).get("global_name") or session.get("user", {}).get("username") or "Developer"}, "bot": {"online": not bot.is_closed(), "user_id": str(bot.user.id) if bot.user else None, "guild_count": len(bot.guilds)}, "configuration": {"configured_admin_count": len(config.SITE_ADMIN_IDS), "api_version": 9}})
 
     async def guilds(request):
         session = request["blin_session"]
-        # Reconcile the persistent guild registry with the live Discord cache.
-        # This prevents stale/old guild IDs from being exposed to the frontend.
         for g in bot.guilds:
             try:
                 database.register_guild(g.id, g.name)
             except Exception:
                 logger.exception("Не удалось зарегистрировать guild %s в БД", g.id)
-        result = [{"id": g.id, "name": g.name, "member_count": g.member_count} for g in bot.guilds if database.guild_enabled(g.id) and _can_manage_guild(session, g.id)]
-        logger.info("Dashboard guild list: user=%s bot_guilds=%s available=%s", (session.get("user") or {}).get("id", "dev"), [g.id for g in bot.guilds], [g["id"] for g in result])
+        result = [{"id": str(g.id), "name": g.name, "member_count": g.member_count} for g in bot.guilds if database.guild_enabled(g.id) and _can_manage_guild(session, g.id)]
+        logger.info("Dashboard guild list: user=%s bot_guilds=%s available=%s", (session.get("user") or {}).get("id", "dev"), [str(g.id) for g in bot.guilds], [g["id"] for g in result])
         return web.json_response(result)
 
     async def objects(request):
@@ -191,10 +184,10 @@ def create_app(bot):
         except (TypeError, ValueError): return _error("invalid_guild_id", 400)
         guild = bot.get_guild(guild_id)
         if not guild:
-            logger.warning("Dashboard guild_not_found: requested=%s bot_guilds=%s", guild_id, [g.id for g in bot.guilds])
+            logger.warning("Dashboard guild_not_found: requested=%s bot_guilds=%s", guild_id, [str(g.id) for g in bot.guilds])
             return _error("guild_not_found", 404)
         if not _can_manage_guild(request["blin_session"], guild.id): return _error("forbidden", 403)
-        return web.json_response({"roles": [{"id": r.id, "name": r.name, "position": r.position, "managed": r.managed} for r in guild.roles if not r.managed], "categories": [{"id": c.id, "name": c.name, "position": c.position} for c in guild.categories], "channels": [{"id": c.id, "name": c.name, "type": str(c.type), "category_id": c.category_id} for c in guild.channels if not isinstance(c, discord.CategoryChannel)]})
+        return web.json_response({"roles": [{"id": str(r.id), "name": r.name, "position": r.position, "managed": r.managed} for r in guild.roles if not r.managed], "categories": [{"id": str(c.id), "name": c.name, "position": c.position} for c in guild.categories], "channels": [{"id": str(c.id), "name": c.name, "type": str(c.type), "category_id": str(c.category_id) if c.category_id else None} for c in guild.channels if not isinstance(c, discord.CategoryChannel)]})
 
     async def cfg(request):
         guild = _guild(bot, request)
@@ -237,7 +230,7 @@ def create_app(bot):
         if not block: return _error("contract_not_found", 404)
         channel = guild.get_channel(block.get("channel_id")) if block.get("channel_id") else None
         if not isinstance(channel, discord.TextChannel): return _error("publish_channel_not_configured")
-        await publish_block(channel, block); return web.json_response({"ok": True, "channel_id": channel.id})
+        await publish_block(channel, block); return web.json_response({"ok": True, "channel_id": str(channel.id)})
 
     async def provision(request):
         guild = _guild(bot, request)
