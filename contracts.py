@@ -49,7 +49,8 @@ class ContractModal(discord.ui.Modal):
         if channel: await channel.send(embed=embed)
         await interaction.response.send_message("Заявка на премию отправлена.",ephemeral=True)
 
-async def publish_block(channel,block):
+
+def _build_publish_payload(block):
     block=_normalize_block(block); content=block.get("message_text") or None; embed=None
     if block.get("embed",True):
         embed=discord.Embed(title=block.get("title") or discord.Embed.Empty,description=block.get("description") or discord.Embed.Empty)
@@ -59,7 +60,24 @@ async def publish_block(channel,block):
         if block.get("image"): embed.set_image(url=block["image"])
     view=discord.ui.View(timeout=None)
     for option in block.get("buttons",[])[:MAX_BUTTONS]:
-        option_data=option; b=discord.ui.Button(label=str(option.get("label",option.get("name","Контракт")))[:80],style=_button_style(option.get("style","primary")))
+        option_data=option
+        b=discord.ui.Button(label=str(option.get("label",option.get("name","Контракт")))[:80],style=_button_style(option.get("style","primary")),custom_id=f"contract:{option.get('id') or option.get('label') or len(view.children)}")
         async def cb(interaction,option_data=option_data): await interaction.response.send_message("Выберите опцию из меню:",view=ContractOptionsView(interaction.guild.id,option_data),ephemeral=True)
         b.callback=cb; view.add_item(b)
-    await channel.send(content=content,embed=embed,view=view)
+    return content,embed,view
+
+
+async def publish_block(channel,block,store=None,store_key=None):
+    content,embed,view=_build_publish_payload(block)
+    message=None
+    if store is not None and store_key:
+        stored_id=store.setdefault("persistent_messages",{}).get(store_key)
+        if stored_id:
+            try: message=await channel.fetch_message(int(stored_id))
+            except (discord.NotFound,discord.Forbidden,discord.HTTPException): message=None
+    if message:
+        try: await message.edit(content=content,embed=embed,view=view)
+        except (discord.NotFound,discord.Forbidden,discord.HTTPException): message=None
+    if message is None: message=await channel.send(content=content,embed=embed,view=view)
+    if store is not None and store_key: store.setdefault("persistent_messages",{})[store_key]=message.id
+    return message
