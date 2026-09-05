@@ -10,11 +10,7 @@ def _option_name(option): return str(option.get("name",option.get("label","Оп�
 def _normalize_block(block):
     if not isinstance(block,dict): return {}
     message=block.get("message") if isinstance(block.get("message"),dict) else {}
-    out=dict(block)
-    out["embed"]=message.get("mode","embed")!="none" if "message" in block else bool(block.get("embed",True))
-    out["color"]=message.get("color",block.get("color")); out["title"]=message.get("title",block.get("title"))
-    out["description"]=message.get("text",message.get("description",block.get("description")))
-    out["message_text"]=block.get("message_text","")
+    out=dict(block); out["embed"]=message.get("mode","embed")!="none" if "message" in block else bool(block.get("embed",True)); out["color"]=message.get("color",block.get("color")); out["title"]=message.get("title",block.get("title")); out["description"]=message.get("text",message.get("description",block.get("description"))); out["message_text"]=block.get("message_text","")
     if message.get("image"): out["image"]=message["image"]
     out["review_channel"]=block.get("review_channel",block.get("review_channel_id")); out["logs_channel"]=block.get("logs_channel",block.get("logs_channel_id"))
     buttons=[]
@@ -29,8 +25,7 @@ def _normalize_block(block):
 
 class ContractOptionsView(discord.ui.View):
     def __init__(self,guild_id,block):
-        super().__init__(timeout=300); self.guild_id=guild_id; self.block=_normalize_block(block)
-        options=self.block.get("options",[])[:MAX_OPTIONS]
+        super().__init__(timeout=300); self.guild_id=guild_id; self.block=_normalize_block(block); options=self.block.get("options",[])[:MAX_OPTIONS]
         if not options: return
         select=discord.ui.Select(placeholder=self.block.get("select_placeholder","Выберите опцию"),options=[discord.SelectOption(label=_option_name(x)[:100],description=str(x.get("description",""))[:100] or None,value=str(i)) for i,x in enumerate(options)])
         async def callback(interaction): await interaction.response.send_modal(ContractModal(guild_id,self.block,options[int(select.values[0])]))
@@ -58,18 +53,16 @@ def _build_publish_payload(block):
             try: embed.colour=discord.Colour(int(str(block["color"]).lstrip('#'),16))
             except (TypeError,ValueError): pass
         if block.get("image"): embed.set_image(url=block["image"])
-    view=discord.ui.View(timeout=None)
-    for option in block.get("buttons",[])[:MAX_BUTTONS]:
-        option_data=option
-        b=discord.ui.Button(label=str(option.get("label",option.get("name","Контракт")))[:80],style=_button_style(option.get("style","primary")),custom_id=f"contract:{option.get('id') or option.get('label') or len(view.children)}")
+    view=discord.ui.View(timeout=None); scope=str(block.get("id") or "draft")
+    for index,option in enumerate(block.get("buttons",[])[:MAX_BUTTONS]):
+        option_data=option; b=discord.ui.Button(label=str(option.get("label",option.get("name","Контракт")))[:80],style=_button_style(option.get("style","primary")),custom_id=f"contract:{scope}:{index}")
         async def cb(interaction,option_data=option_data): await interaction.response.send_message("Выберите опцию из меню:",view=ContractOptionsView(interaction.guild.id,option_data),ephemeral=True)
         b.callback=cb; view.add_item(b)
     return content,embed,view
 
 
 async def publish_block(channel,block,store=None,store_key=None):
-    content,embed,view=_build_publish_payload(block)
-    message=None
+    content,embed,view=_build_publish_payload(block); message=None
     if store is not None and store_key:
         stored_id=store.setdefault("persistent_messages",{}).get(store_key)
         if stored_id:
