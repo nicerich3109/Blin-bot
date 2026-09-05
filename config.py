@@ -10,6 +10,11 @@ DB_PATH = os.getenv("BLIN_DB_PATH", "/app/data/blin.sqlite3")
 API_HOST = os.getenv("BLIN_API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("PORT", os.getenv("BLIN_API_PORT", "3000")))
 API_SECRET = os.getenv("BLIN_API_SECRET", "")
+
+# The dashboard is hosted on GitHub Pages. Set a safe default so browser
+# requests to the separate API are accepted without requiring an environment
+# variable on every deployment. A custom domain can still override this.
+os.environ.setdefault("BLIN_API_ALLOWED_ORIGINS", "https://nicerich3109.github.io")
 API_ALLOWED_ORIGINS = os.getenv("BLIN_API_ALLOWED_ORIGINS", "")
 
 # Dashboard OAuth2. Keep the client secret server-side only.
