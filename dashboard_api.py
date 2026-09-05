@@ -11,7 +11,6 @@ from aiohttp import web, ClientSession, BasicAuth
 import config
 import database
 import storage
-import utils
 from provisioning import provision_guild, save_provisioning_result
 from contracts import publish_block
 from applications import JoinInfoView
@@ -76,47 +75,35 @@ def _validate_contract(block):
 
 
 async def _upsert_message(channel, store_key, *, content=None, embed=None, embeds=None, view=None):
-    """Edit the dashboard-published message when known; otherwise create it."""
     messages = storage.DATA.setdefault("persistent_messages", {})
     stored_id = messages.get(store_key)
     message = None
     if stored_id:
-        try:
-            message = await channel.fetch_message(int(stored_id))
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            message = None
+        try: message = await channel.fetch_message(int(stored_id))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException): message = None
     kwargs = {"content": content, "view": view}
-    if embeds is not None:
-        kwargs["embeds"] = embeds
-    else:
-        kwargs["embed"] = embed
+    if embeds is not None: kwargs["embeds"] = embeds
+    else: kwargs["embed"] = embed
     if message:
-        try:
-            await message.edit(**kwargs)
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            message = None
-    if message is None:
-        message = await channel.send(**kwargs)
+        try: await message.edit(**kwargs)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException): message = None
+    if message is None: message = await channel.send(**kwargs)
     messages[store_key] = message.id
     await storage.persist()
     return message
 
 
 def _text_channel(guild, raw_id):
-    if not raw_id:
-        return None
-    try:
-        channel = guild.get_channel(int(raw_id))
-    except (TypeError, ValueError):
-        return None
+    if not raw_id: return None
+    try: channel = guild.get_channel(int(raw_id))
+    except (TypeError, ValueError): return None
     return channel if isinstance(channel, (discord.TextChannel, discord.NewsChannel)) else None
 
 
 async def _publish_applications(guild):
     raw = database.get_config(guild.id)
     channel = _text_channel(guild, raw.get("recruit_info_channel"))
-    if channel is None:
-        raise ValueError("publish_channel_not_configured")
+    if channel is None: raise ValueError("publish_channel_not_configured")
     embed = discord.Embed(title="Вступление в компанию", description=raw.get("join_info_text") or config.RECRUIT_INFO_TEXT, color=discord.Color.blurple())
     message = await _upsert_message(channel, f"recruit_info_{guild.id}", embeds=[embed], view=JoinInfoView(database.server_configs(guild.id)))
     return message, channel
@@ -125,11 +112,9 @@ async def _publish_applications(guild):
 async def _publish_reaction(guild, config_id):
     configs = database.list_reaction_role_configs(guild.id)
     item = next((x for x in configs if int(x.get("id", -1)) == config_id), None)
-    if not item:
-        raise LookupError("reaction_role_not_found")
+    if not item: raise LookupError("reaction_role_not_found")
     channel = _text_channel(guild, item.get("channel_id"))
-    if channel is None:
-        raise ValueError("publish_channel_not_configured")
+    if channel is None: raise ValueError("publish_channel_not_configured")
     embed = None
     if item.get("image") or item.get("text"):
         embed = discord.Embed(description=item.get("text") or "")
@@ -140,7 +125,7 @@ async def _publish_reaction(guild, config_id):
     return message, channel
 
 
-async def create_app(bot):
+def create_app(bot):
     origins = {x.strip() for x in os.getenv("BLIN_API_ALLOWED_ORIGINS", "").split(",") if x.strip()}
 
     @web.middleware
@@ -167,19 +152,14 @@ async def create_app(bot):
 
     app = web.Application(middlewares=[cors, auth])
 
-    async def root(request):
-        return web.json_response({"service": "Blin Bot API", "status": "online", "api_version": 10, "dashboard": "ready", "health": "/health"})
-
-    async def health(request):
-        return web.json_response({"ok": True, "service": "blin-bot", "api_version": 10})
+    async def root(request): return web.json_response({"service": "Blin Bot API", "status": "online", "api_version": 10, "dashboard": "ready", "health": "/health"})
+    async def health(request): return web.json_response({"ok": True, "service": "blin-bot", "api_version": 10})
 
     async def auth_discord(request):
         if not config.DISCORD_CLIENT_ID or not config.DISCORD_REDIRECT_URI: return _error("Discord OAuth2 is not configured", 503)
         state = secrets.token_urlsafe(32); OAUTH_STATES.add(state)
         params = {"client_id": config.DISCORD_CLIENT_ID, "response_type": "code", "redirect_uri": config.DISCORD_REDIRECT_URI, "scope": "identify guilds", "state": state}
-        response = web.HTTPFound("https://discord.com/oauth2/authorize?" + urlencode(params))
-        response.set_cookie("blin_oauth_state", state, httponly=True, secure=True, samesite="None", max_age=600)
-        return response
+        response = web.HTTPFound("https://discord.com/oauth2/authorize?" + urlencode(params)); response.set_cookie("blin_oauth_state", state, httponly=True, secure=True, samesite="None", max_age=600); return response
 
     async def auth_callback(request):
         query_state = request.query.get("state"); cookie_state = request.cookies.get("blin_oauth_state"); code = request.query.get("code"); state = query_state or cookie_state
@@ -194,8 +174,7 @@ async def create_app(bot):
                     if response.status != 200:
                         try: error_body = await response.text()
                         except Exception: error_body = "<unreadable>"
-                        logger.error("Discord OAuth token exchange failed: status=%s body=%s redirect_uri=%s client_id=%s", response.status, error_body[:1000], config.DISCORD_REDIRECT_URI, config.DISCORD_CLIENT_ID)
-                        return _error("oauth_token_exchange_failed", 502)
+                        logger.error("Discord OAuth token exchange failed: status=%s body=%s redirect_uri=%s client_id=%s", response.status, error_body[:1000], config.DISCORD_REDIRECT_URI, config.DISCORD_CLIENT_ID); return _error("oauth_token_exchange_failed", 502)
                     token_data = await response.json()
                 access_token = token_data.get("access_token")
                 if not access_token: return _error("oauth_token_exchange_failed", 502)
@@ -209,14 +188,10 @@ async def create_app(bot):
         except Exception:
             logger.exception("Unexpected Discord OAuth token exchange error"); return _error("oauth_token_exchange_failed", 502)
         allowed = {str(g["id"]): int(g.get("permissions", "0")) for g in user_guilds if int(g.get("permissions", "0")) & (MANAGE_GUILD | ADMINISTRATOR)}
-        session_id = secrets.token_urlsafe(32); SESSIONS[session_id] = {"user": user, "guild_permissions": allowed}
-        target = os.getenv("BLIN_DASHBOARD_URL", "/dashboard.html"); response = web.HTTPFound(target)
-        response.set_cookie("blin_session", session_id, httponly=True, secure=True, samesite="None", max_age=86400); response.del_cookie("blin_oauth_state"); return response
+        session_id = secrets.token_urlsafe(32); SESSIONS[session_id] = {"user": user, "guild_permissions": allowed}; target = os.getenv("BLIN_DASHBOARD_URL", "/dashboard.html"); response = web.HTTPFound(target); response.set_cookie("blin_session", session_id, httponly=True, secure=True, samesite="None", max_age=86400); response.del_cookie("blin_oauth_state"); return response
 
     async def auth_me(request):
-        session = request["blin_session"]
-        return web.json_response({"user": session.get("user"), "guild_ids": list(session.get("guild_permissions", {}).keys()), "site_admin": _is_site_admin(session)})
-
+        session = request["blin_session"]; return web.json_response({"user": session.get("user"), "guild_ids": list(session.get("guild_permissions", {}).keys()), "site_admin": _is_site_admin(session)})
     async def auth_logout(request):
         token = request.cookies.get("blin_session")
         if token: SESSIONS.pop(token, None)
@@ -233,15 +208,13 @@ async def create_app(bot):
             try: database.register_guild(g.id, g.name)
             except Exception: logger.exception("Не удалось зарегистрировать guild %s в БД", g.id)
         result = [{"id": str(g.id), "name": g.name, "member_count": g.member_count} for g in bot.guilds if database.guild_enabled(g.id) and _can_manage_guild(session, g.id)]
-        logger.info("Dashboard guild list: user=%s bot_guilds=%s available=%s", (session.get("user") or {}).get("id", "dev"), [str(g.id) for g in bot.guilds], [g["id"] for g in result])
-        return web.json_response(result)
+        logger.info("Dashboard guild list: user=%s bot_guilds=%s available=%s", (session.get("user") or {}).get("id", "dev"), [str(g.id) for g in bot.guilds], [g["id"] for g in result]); return web.json_response(result)
 
     async def objects(request):
-        guild_id_raw = request.match_info.get("guild_id")
-        try: guild_id = int(guild_id_raw)
+        try: guild_id = int(request.match_info.get("guild_id"))
         except (TypeError, ValueError): return _error("invalid_guild_id", 400)
         guild = bot.get_guild(guild_id)
-        if not guild: logger.warning("Dashboard guild_not_found: requested=%s bot_guilds=%s", guild_id, [str(g.id) for g in bot.guilds]); return _error("guild_not_found", 404)
+        if not guild: return _error("guild_not_found", 404)
         if not _can_manage_guild(request["blin_session"], guild.id): return _error("forbidden", 403)
         return web.json_response({"roles": [{"id": str(r.id), "name": r.name, "position": r.position, "managed": r.managed} for r in guild.roles if not r.managed], "categories": [{"id": str(c.id), "name": c.name, "position": c.position} for c in guild.categories], "channels": [{"id": str(c.id), "name": c.name, "type": str(c.type), "category_id": str(c.category_id) if c.category_id else None} for c in guild.channels if not isinstance(c, discord.CategoryChannel)]})
 
@@ -286,9 +259,8 @@ async def create_app(bot):
         if not block: return _error("contract_not_found", 404)
         channel = _text_channel(guild, block.get("channel_id"))
         if channel is None: return _error("publish_channel_not_configured")
-        message = await publish_block(channel, block, store=storage.DATA, store_key=f"contract_{guild.id}_{contract_id}")
-        await storage.persist()
-        return web.json_response({"ok": True, "channel_id": str(channel.id), "message_id": str(message.id), "updated": bool(message)})
+        message = await publish_block(channel, block, store=storage.DATA, store_key=f"contract_{guild.id}_{contract_id}"); await storage.persist()
+        return web.json_response({"ok": True, "channel_id": str(channel.id), "message_id": str(message.id)})
 
     async def publish_panel(request):
         guild = _guild(bot, request)
@@ -304,7 +276,7 @@ async def create_app(bot):
                 profile = str(body.get("profile") or "").strip()
                 if not profile: return _error("profile_not_configured")
                 p = database.get_server_config(guild.id, profile)
-                if not p: return _error("profile_not_found")
+                if not p: return _error("profile_not_found", 404)
                 channel = _text_channel(guild, p.get("vacation_channel"))
                 if channel is None: return _error("publish_channel_not_configured")
                 await refresh_vacation_message(guild, profile)
