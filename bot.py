@@ -26,11 +26,6 @@ class BlinBot(commands.Bot):
                 self.add_view(RequestDecisionView("vacation", vac_id))
 
         register_commands(self)
-
-        # Start the HTTP API BEFORE Discord command synchronization.
-        # Discord can temporarily rate-limit tree.sync() (HTTP 429). If sync()
-        # blocks while retrying, Bothost must still be able to reach the API
-        # port; otherwise its reverse proxy reports "Bad Gateway".
         try:
             self.dashboard_runner = await start_api(self)
             logger.info("Dashboard API запущен на %s:%s", config.API_HOST, config.API_PORT)
@@ -42,9 +37,6 @@ class BlinBot(commands.Bot):
             await self.tree.sync()
             logger.info("Discord slash-команды синхронизированы")
         except Exception:
-            # A Discord API rate limit or temporary error must not take down
-            # the dashboard/API. The bot can remain online and retry on the
-            # next deployment/restart.
             logger.exception("Не удалось синхронизировать Discord slash-команды")
 
 
@@ -62,7 +54,7 @@ async def on_ready():
         recruit_channel_id = raw.get("recruit_info_channel")
         recruit_channel = guild.get_channel(recruit_channel_id) if recruit_channel_id else None
         if recruit_channel:
-            embed = discord.Embed(title="Вступление в компанию", description=config.RECRUIT_INFO_TEXT, color=discord.Color.blurple())
+            embed = discord.Embed(title="Вступление в компанию", description=raw.get("join_info_text") or config.RECRUIT_INFO_TEXT, color=discord.Color.blurple())
             await utils.ensure_persistent_message(recruit_channel, storage.DATA, f"recruit_info_{guild.id}", [embed], JoinInfoView(server_profiles))
             await storage.persist()
         for server in database.server_keys(guild.id):
@@ -78,6 +70,37 @@ async def on_ready():
             await restore_vacation_schedules(guild)
         except Exception:
             logger.exception("Ошибка инициализации отпусков на %s", guild.id)
+
+
+@bot.event
+async def on_message(message: discord.Message):
+    if message.author.bot or not message.guild:
+        return
+    if database.module_enabled(message.guild.id, "applications") is False and not database.get_config(message.guild.id).get("autoreplies"):
+        await bot.process_commands(message)
+        return
+    rules = database.get_config(message.guild.id).get("autoreplies", [])
+    if isinstance(rules, list):
+        content = message.content.casefold().strip()
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            trigger = str(rule.get("trigger", "")).casefold().strip()
+            response = str(rule.get("response", ""))
+            if not trigger or not response or trigger not in content:
+                continue
+            channel_id = str(rule.get("channel_id", "")).strip()
+            if channel_id and channel_id != str(message.channel.id):
+                continue
+            role_id = str(rule.get("role_id", "")).strip()
+            if role_id and not any(str(role.id) == role_id for role in getattr(message.author, "roles", [])):
+                continue
+            try:
+                await message.channel.send(response, allowed_mentions=discord.AllowedMentions(users=True, roles=True, everyone=False))
+            except discord.HTTPException:
+                logger.exception("Не удалось отправить автоответ в guild=%s channel=%s", message.guild.id, message.channel.id)
+            break
+    await bot.process_commands(message)
 
 
 def main():
