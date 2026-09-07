@@ -8,6 +8,8 @@ import decisions
 import discipline
 import storage
 import vacations
+from dashboard_api import _publish_applications, _publish_reaction, _text_channel
+from contracts import publish_block
 
 
 async def _autocomplete_number(interaction: discord.Interaction, current: str):
@@ -32,7 +34,78 @@ def _module_ok(interaction: discord.Interaction, module: str) -> bool:
     return bool(interaction.guild and database.module_enabled(interaction.guild.id, module))
 
 
+def _can_publish(interaction: discord.Interaction) -> bool:
+    return bool(
+        interaction.guild
+        and (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.administrator)
+    )
+
+
+async def _publish_all(guild: discord.Guild):
+    """Publish/update every configured panel using the same DB settings edited by the Dashboard."""
+    results = []
+
+    # Applications
+    raw = database.get_config(guild.id)
+    if raw.get("recruit_info_channel"):
+        message, channel = await _publish_applications(guild)
+        results.append(f"заявки: <#{channel.id}>")
+
+    # Vacations — one panel per configured server/state profile.
+    for profile in database.server_keys(guild.id):
+        profile_cfg = database.get_server_config(guild.id, profile) or {}
+        if not profile_cfg.get("vacation_channel"):
+            continue
+        await vacations.refresh_vacation_message(guild, profile)
+        results.append(f"отпуск {profile}: <#{int(profile_cfg['vacation_channel'])}>")
+
+    # Reaction-role panels.
+    for item in database.list_reaction_role_configs(guild.id):
+        message, channel = await _publish_reaction(guild, int(item["id"]))
+        results.append(f"роли «{item.get('name') or item.get('id')}»: <#{channel.id}>")
+
+    # Contract panels.
+    for block in database.list_contracts(guild.id):
+        channel = _text_channel(guild, block.get("channel_id"))
+        if channel is None:
+            continue
+        await publish_block(
+            channel,
+            block,
+            store=storage.DATA,
+            store_key=f"contract_{guild.id}_{block['id']}" if block.get("id") is not None else None,
+        )
+        results.append(f"контракт: <#{channel.id}>")
+
+    await storage.persist()
+    return results
+
+
 def register_commands(bot: commands.Bot):
+    @bot.tree.command(name="publish", description="Опубликовать или обновить панели из настроек Dashboard")
+    @app_commands.default_permissions(manage_guild=True)
+    async def publish(i: discord.Interaction):
+        if not i.guild:
+            return await i.response.send_message("Эта команда работает только на сервере.", ephemeral=True)
+        if not _can_publish(i):
+            return await i.response.send_message("Недостаточно прав. Нужны права управления сервером.", ephemeral=True)
+
+        await i.response.defer(ephemeral=True, thinking=True)
+        try:
+            results = await _publish_all(i.guild)
+        except discord.Forbidden:
+            return await i.followup.send("Боту не хватает прав для публикации в одном из настроенных каналов.", ephemeral=True)
+        except discord.HTTPException as exc:
+            return await i.followup.send(f"Discord вернул ошибку при публикации: HTTP {exc.status}.", ephemeral=True)
+        except Exception:
+            import logging
+            logging.getLogger("blin_bot.commands").exception("/publish failed for guild=%s", i.guild.id)
+            return await i.followup.send("Не удалось выполнить публикацию. Проверь настройки Dashboard и логи бота.", ephemeral=True)
+
+        if not results:
+            return await i.followup.send("В Dashboard пока нет настроенных панелей для публикации.", ephemeral=True)
+        await i.followup.send("Опубликовано/обновлено:\n• " + "\n• ".join(results), ephemeral=True)
+
     @bot.tree.command(name="принять", description="Принять заявку")
     @app_commands.describe(номер="Номер заявки")
     @app_commands.autocomplete(номер=_autocomplete_number)
