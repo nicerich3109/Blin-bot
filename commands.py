@@ -8,7 +8,9 @@ import decisions
 import discipline
 import storage
 import vacations
-from dashboard_api import _publish_applications, _publish_reaction, _text_channel
+from applications import JoinInfoView
+from reaction_roles import RoleButtonView
+from dashboard_api import _upsert_message
 from contracts import publish_block
 
 
@@ -39,6 +41,67 @@ def _can_publish(interaction: discord.Interaction) -> bool:
         interaction.guild
         and (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.administrator)
     )
+
+
+def _text_channel(guild: discord.Guild, raw_id):
+    """Return a publishable text/announcement channel without referencing removed NewsChannel API."""
+    if not raw_id:
+        return None
+    try:
+        channel = guild.get_channel(int(raw_id))
+    except (TypeError, ValueError):
+        return None
+    return channel if isinstance(channel, discord.TextChannel) else None
+
+
+async def _publish_applications(guild: discord.Guild):
+    raw = database.get_config(guild.id)
+    channel = _text_channel(guild, raw.get("recruit_info_channel"))
+    if channel is None:
+        raise ValueError("publish_channel_not_configured")
+    import config
+    embed = discord.Embed(
+        title="Вступление в компанию",
+        description=raw.get("join_info_text") or config.RECRUIT_INFO_TEXT,
+        color=discord.Color.blurple(),
+    )
+    message = await _upsert_message(
+        channel,
+        f"recruit_info_{guild.id}",
+        embeds=[embed],
+        view=JoinInfoView(database.server_configs(guild.id)),
+    )
+    return message, channel
+
+
+async def _publish_reaction(guild: discord.Guild, config_id: int):
+    item = next(
+        (x for x in database.list_reaction_role_configs(guild.id) if int(x.get("id", -1)) == config_id),
+        None,
+    )
+    if not item:
+        raise LookupError("reaction_role_not_found")
+    channel = _text_channel(guild, item.get("channel_id"))
+    if channel is None:
+        raise ValueError("publish_channel_not_configured")
+
+    embed = None
+    if item.get("image") or item.get("text"):
+        embed = discord.Embed(description=item.get("text") or "")
+        if item.get("name"):
+            embed.title = str(item["name"])[:256]
+        if item.get("image"):
+            embed.set_image(url=item["image"])
+
+    view = RoleButtonView(guild.id, item.get("buttons", [])[:20], config_id)
+    message = await _upsert_message(
+        channel,
+        f"reaction_roles_{guild.id}_{config_id}",
+        content=None if embed else item.get("text"),
+        embed=embed,
+        view=view,
+    )
+    return message, channel
 
 
 async def _publish_all(guild: discord.Guild):
