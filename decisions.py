@@ -9,6 +9,7 @@ import discord
 
 import config
 import storage
+import bot_features_config as feature_config
 import utils
 import consent_storage
 from logger_setup import logger
@@ -338,7 +339,7 @@ async def _decide_contract(guild, staff_member, number, accepted, reason):
     if reason:
         item["decline_reason"] = reason
     await storage.persist()
-    channel = guild.get_channel(config.CONTRACT_PAYOUT_CHANNELS[server])
+    channel = guild.get_channel(feature_config.CONTRACT_PAYOUT_CHANNELS[server])
     if channel and item.get("message_id"):
         try:
             msg = await channel.fetch_message(item["message_id"])
