@@ -23,6 +23,7 @@ from vacations import (
 from commands import register_commands
 from contracts import ContractPanelView, publish_contract_panel
 from discipline import ensure_discipline_roles
+from roles_data import save_roles
 from reaction_roles import publish_reaction_role_messages, handle_reaction_add, handle_reaction_remove
 
 intents = discord.Intents.default()
@@ -73,6 +74,11 @@ bot = BlinBot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     logger.info("Бот запущен как %s (ID: %s)", bot.user, bot.user.id)
+
+    try:
+        save_roles(bot.guilds)
+    except Exception:
+        logger.exception("Не удалось сохранить сведения о ролях")
 
     # Каналы из config.py принадлежат конкретному серверу. Не пытаемся
     # искать их через fetch_channel() в других гильдиях: это приводит к
