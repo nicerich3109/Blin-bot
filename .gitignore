@@ -3,3 +3,5 @@ data.json.tmp
 bot.log
 *.pyc
 __pycache__/
+consents.json
+consents.json.tmp
