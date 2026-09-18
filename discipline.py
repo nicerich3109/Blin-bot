@@ -14,7 +14,8 @@ async def ensure_discipline_roles(guild):
         result[name]=role.id
     return result
 async def issue_warning(guild,issuer,target,reason,workoff,server):
-    if server not in ("DN", "PHX"): return False,"Неверно указан сервер. Используйте DN или PHX."\n    if not issuer.guild_permissions.administrator and not utils.is_recruiter(issuer,server): return False,"У вас нет прав выдавать дисциплинарные взыскания."
+    if server not in ("DN", "PHX"): return False,"Неверно указан сервер. Используйте DN или PHX."
+    if not issuer.guild_permissions.administrator and not utils.is_recruiter(issuer,server): return False,"У вас нет прав выдавать дисциплинарные взыскания."
     roles=await ensure_discipline_roles(guild); one=guild.get_role(roles.get("1/3 строгих")); two=guild.get_role(roles.get("2/3 строгих"))
     if one is None or two is None: return False,"Не удалось найти или создать роли дисциплины."
     state="two" if two in target.roles else "one" if one in target.roles else "none"
