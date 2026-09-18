@@ -2,6 +2,7 @@
 """Система дисциплинарных взысканий."""
 import discord
 import config, utils
+import consent_storage
 import bot_features_config as feature_config
 from logger_setup import logger
 async def ensure_discipline_roles(guild):
@@ -24,10 +25,12 @@ async def issue_warning(guild,issuer,target,reason,workoff,server):
         elif state=="one": await target.remove_roles(one,reason=reason); await target.add_roles(two,reason=reason); title="2/3"; public=f"⚠️ {target.mention} получил выговор (2/3). Выдал: {issuer.mention}. Причина: {reason}. Отработка: {workoff}"
         else: title="понижение"; public=f"⬇️ {target.mention} понижен. Выдал: {issuer.mention}. Причина: {reason}. Отработка: {workoff}"
     except discord.Forbidden: return False,"Бот не может изменить роли участника. Проверьте иерархию ролей."
-    dm=f"Вам выдано дисциплинарное взыскание ({title}).\nПричина: {reason}\nОтработка: {workoff}"
-    try: await target.send(dm)
-    except discord.HTTPException: logger.warning("Не удалось отправить дисциплинарное ЛС %s",target.id)
-    server = "DN" if any(r.id == config.JOIN_SERVER_ROLE_DN for r in target.roles) else "PHX"
+    if consent_storage.has_consent(target.id):
+        dm=f"Вам выдано дисциплинарное взыскание ({title}).\nСервер: {utils.SERVER_NAMES[server]}\nПричина: {reason}\nОтработка: {workoff}"
+        try: await target.send(dm)
+        except discord.HTTPException: logger.warning("Не удалось отправить дисциплинарное ЛС %s",target.id)
+    else:
+        logger.info("Дисциплинарное ЛС %s не отправлено: пользователь не дал согласие",target.id)
     channel = guild.get_channel(feature_config.DISCIPLINE_LOG_CHANNELS[server])
     if channel:
         try:
