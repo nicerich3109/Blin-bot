@@ -25,4 +25,11 @@ async def issue_warning(guild,issuer,target,reason,workoff):
     dm=f"Вам выдано дисциплинарное взыскание ({title}).\nПричина: {reason}\nОтработка: {workoff}"
     try: await target.send(dm)
     except discord.HTTPException: logger.warning("Не удалось отправить дисциплинарное ЛС %s",target.id)
+    server = "DN" if any(r.id == config.JOIN_SERVER_ROLE_DN for r in target.roles) else "PHX"
+    channel = guild.get_channel(config.DISCIPLINE_LOG_CHANNELS[server])
+    if channel:
+        try:
+            await channel.send(public)
+        except discord.HTTPException:
+            logger.exception("Не удалось отправить дисциплинарный лог")
     return True,public
