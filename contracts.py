@@ -2,13 +2,14 @@
 """Заявки на выплату контрактов."""
 import discord
 import config, storage, utils
+import bot_features_config as feature_config
 from logger_setup import logger
 from ui_decision import RequestDecisionView
 
 class ContractOptionSelect(discord.ui.Select):
     def __init__(self,server,key):
         self.server,self.key=server,key
-        item=next(i for i in config.CONTRACT_BUTTONS[server] if i["key"]==key)
+        item=next(i for i in feature_config.CONTRACT_BUTTONS[server] if i["key"]==key)
         options=item["options"][:10]
         super().__init__(placeholder="Выберите опцию из меню:",options=[
             discord.SelectOption(label=str(o["label"])[:100],value=str(o["value"])[:100],
@@ -37,7 +38,7 @@ class ContractModal(discord.ui.Modal):
         for i,field in enumerate(self.option.get("fields",[])[:5]):
             values[str(field.get("label",f"Поле {i+1}"))]=str(getattr(self,f"field_{i}").value)
         number=storage.next_contract_id(self.server)
-        channel=interaction.guild.get_channel(config.CONTRACT_PAYOUT_CHANNELS[self.server])
+        channel=interaction.guild.get_channel(feature_config.CONTRACT_PAYOUT_CHANNELS[self.server])
         if channel is None:
             await interaction.response.send_message("❌ Канал заявок на выплату не найден.",ephemeral=True); return
         embed=discord.Embed(title=f"Заявка на выплату {number}",description=f"Тип: **{self.option.get('label',self.key)}**",color=discord.Color.gold())
@@ -62,9 +63,9 @@ class ContractPanelView(discord.ui.View):
         for item in config.CONTRACT_BUTTONS[server][:20]: self.add_item(ContractPanelButton(server,item["key"],item))
 
 async def publish_contract_panel(guild,server):
-    channel=guild.get_channel(config.CONTRACT_PANEL_CHANNELS[server])
+    channel=guild.get_channel(feature_config.CONTRACT_PANEL_CHANNELS[server])
     if channel is None: logger.error("Канал панели контрактов %s не найден",server); return
-    embed=discord.Embed(title=config.CONTRACT_PANEL_TITLES[server],description=config.CONTRACT_PANEL_TEXTS[server],color=discord.Color.blurple())
-    if config.CONTRACT_PANEL_IMAGES.get(server): embed.set_image(url=config.CONTRACT_PANEL_IMAGES[server])
+    embed=discord.Embed(title=feature_config.CONTRACT_PANEL_TITLES[server],description=feature_config.CONTRACT_PANEL_TEXTS[server],color=discord.Color.blurple())
+    if feature_config.CONTRACT_PANEL_IMAGES.get(server): embed.set_image(url=config.CONTRACT_PANEL_IMAGES[server])
     await utils.ensure_persistent_message(channel,storage.DATA,f"contract_panel_{server}",[embed],ContractPanelView(server))
     await storage.persist()
