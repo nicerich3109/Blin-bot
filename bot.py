@@ -21,10 +21,14 @@ from vacations import (
     restore_vacation_schedules,
 )
 from commands import register_commands
+from contracts import ContractPanelView, publish_contract_panel
+from discipline import ensure_discipline_roles
+from reaction_roles import publish_reaction_role_messages, handle_reaction_add, handle_reaction_remove
 
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
+intents.reactions = True
 
 
 class BlinBot(commands.Bot):
@@ -32,6 +36,8 @@ class BlinBot(commands.Bot):
         self.add_view(JoinInfoView())
         self.add_view(VacationInfoView("DN"))
         self.add_view(VacationInfoView("PHX"))
+        self.add_view(ContractPanelView("DN"))
+        self.add_view(ContractPanelView("PHX"))
 
         for number, app in storage.DATA["applications"].items():
             if app.get("status") == "pending":
@@ -72,6 +78,13 @@ async def on_ready():
             continue
 
         logger.info("Инициализация сообщений Blin в гильдии %s (%s)", guild.name, guild.id)
+        try:
+            await ensure_discipline_roles(guild)
+            await publish_contract_panel(guild, "DN")
+            await publish_contract_panel(guild, "PHX")
+            await publish_reaction_role_messages(guild)
+        except Exception:
+            logger.exception("Ошибка публикации дополнительных панелей в гильдии %s", guild.id)
 
         # Каждый тип сообщения обрабатываем независимо. Ошибка одного
         # сообщения не должна останавливать публикацию/обновление остальных.
@@ -135,3 +148,18 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    try:
+        await handle_reaction_add(payload)
+    except Exception:
+        logger.exception("Ошибка обработки добавления реакции")
+
+@bot.event
+async def on_raw_reaction_remove(payload):
+    try:
+        await handle_reaction_remove(payload)
+    except Exception:
+        logger.exception("Ошибка обработки удаления реакции")
