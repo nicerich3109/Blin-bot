@@ -99,16 +99,21 @@ def register_commands(bot: commands.Bot):
 
     @bot.tree.command(name="выдать_выговор", description="Выдать дисциплинарное взыскание")
     @app_commands.describe(
+        сервер="Сервер: PHX или DN",
         участник="Кому выдать взыскание",
         причина="Причина взыскания",
         отработка="Что необходимо отработать",
     )
-    async def cmd_issue_warning(interaction: discord.Interaction, участник: discord.Member, причина: str, отработка: str):
+    @app_commands.choices(сервер=[
+        app_commands.Choice(name="PHX", value="PHX"),
+        app_commands.Choice(name="DN", value="DN"),
+    ])
+    async def cmd_issue_warning(interaction: discord.Interaction, сервер: str, участник: discord.Member, причина: str, отработка: str):
         if interaction.guild is None:
             await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
         ok, message = await discipline.issue_warning(
-            interaction.guild, interaction.user, участник, причина, отработка
+            interaction.guild, interaction.user, участник, причина, отработка, сервер
         )
         await interaction.followup.send(message, ephemeral=True)
