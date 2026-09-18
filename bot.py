@@ -58,46 +58,66 @@ bot = BlinBot(command_prefix="!", intents=intents)
 async def on_ready():
     logger.info("Бот запущен как %s (ID: %s)", bot.user, bot.user.id)
 
+    # Каналы из config.py принадлежат конкретному серверу. Не пытаемся
+    # искать их через fetch_channel() в других гильдиях: это приводит к
+    # InvalidData: Guild ID resolved to a different guild.
+    configured_channel_ids = {
+        config.RECRUIT_INFO_CHANNEL,
+        config.VACATION_CHANNEL_DN,
+        config.VACATION_CHANNEL_PHX,
+    }
+
     for guild in bot.guilds:
-        configured_channel_ids = {
-            config.RECRUIT_INFO_CHANNEL,
-            config.VACATION_CHANNEL_DN,
-            config.VACATION_CHANNEL_PHX,
-        }
         if not any(guild.get_channel(channel_id) is not None for channel_id in configured_channel_ids):
-            logger.info("Пропускаю гильдию %s (%s): каналы Blin в config.py не найдены", guild.name, guild.id)
             continue
 
+        logger.info("Инициализация сообщений Blin в гильдии %s (%s)", guild.name, guild.id)
+
+        # Каждый тип сообщения обрабатываем независимо. Ошибка одного
+        # сообщения не должна останавливать публикацию/обновление остальных.
         recruit_channel = guild.get_channel(config.RECRUIT_INFO_CHANNEL)
-        if recruit_channel:
-            embed = discord.Embed(
-                title="Вступление в компанию",
-                description=config.RECRUIT_INFO_TEXT,
-                color=discord.Color.blurple(),
-            )
-            await utils.ensure_persistent_message(
-                recruit_channel, storage.DATA, "recruit_info", [embed], JoinInfoView()
-            )
-            await storage.persist()
+        if recruit_channel is not None:
+            try:
+                embed = discord.Embed(
+                    title="Вступление в компанию",
+                    description=config.RECRUIT_INFO_TEXT,
+                    color=discord.Color.blurple(),
+                )
+                await utils.ensure_persistent_message(
+                    recruit_channel, storage.DATA, "recruit_info", [embed], JoinInfoView()
+                )
+                await storage.persist()
+                logger.info("Сообщение заявок на вступление опубликовано/обновлено: %s", recruit_channel.id)
+            except (discord.HTTPException, discord.Forbidden, discord.NotFound) as exc:
+                logger.exception("Не удалось опубликовать/обновить сообщение заявок: %s", exc)
         else:
-            logger.error("Канал заявок на вступление (ID %s) не найден", config.RECRUIT_INFO_CHANNEL)
+            logger.error("Канал заявок на вступление (ID %s) не найден в гильдии %s", config.RECRUIT_INFO_CHANNEL, guild.id)
 
         for server in ("DN", "PHX"):
             vacation_channel_id = utils.VACATION_CHANNELS[server]
-            if guild.get_channel(vacation_channel_id) is None:
-                logger.info("Канал отпуска %s (ID %s) не найден в гильдии %s — пропускаю", server, vacation_channel_id, guild.id)
+            vacation_channel = guild.get_channel(vacation_channel_id)
+            if vacation_channel is None:
+                logger.info(
+                    "Канал отпуска %s (ID %s) не найден в гильдии %s — пропускаю",
+                    server, vacation_channel_id, guild.id
+                )
                 continue
+
             try:
                 await refresh_vacation_message(guild, server)
-            except (discord.HTTPException, discord.InvalidData):
-                logger.exception("Не удалось обновить сообщение отпуска для %s", server)
+                logger.info(
+                    "Сообщение отпуска %s опубликовано/обновлено: %s",
+                    server, vacation_channel_id
+                )
+            except (discord.HTTPException, discord.Forbidden, discord.NotFound, discord.InvalidData):
+                logger.exception("Не удалось опубликовать/обновить сообщение отпуска для %s", server)
 
         try:
             changed = await check_and_expire_vacations(guild)
             for server in changed:
                 try:
                     await refresh_vacation_message(guild, server)
-                except (discord.HTTPException, discord.InvalidData):
+                except (discord.HTTPException, discord.Forbidden, discord.NotFound, discord.InvalidData):
                     logger.exception("Не удалось обновить список отпускников для %s", server)
             await restore_vacation_schedules(guild)
         except Exception:
