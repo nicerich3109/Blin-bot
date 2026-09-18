@@ -10,10 +10,12 @@ import discord
 import config
 import storage
 import utils
+import consent_storage
 from logger_setup import logger
 
 KIND_JOIN = "join"
 KIND_VACATION = "vacation"
+KIND_CONTRACT = "contract"
 
 
 def find_kind(key: str):
@@ -31,6 +33,8 @@ async def decide_request(guild: discord.Guild, staff_member: discord.Member,
         return await _decide_join(guild, staff_member, key, accepted, reason)
     if kind == KIND_VACATION:
         return await _decide_vacation(guild, staff_member, key, accepted, reason)
+    if kind == KIND_CONTRACT:
+        return await _decide_contract(guild, staff_member, key, accepted, reason)
     return False, "Неизвестный тип заявки."
 
 
@@ -64,6 +68,19 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
     applicant = await utils.get_member_safe(guild, app["applicant_id"])
     if applicant is None:
         logger.warning("Заявитель %s заявки %s не найден на сервере", app["applicant_id"], number)
+    elif consent_storage.has_consent(app["applicant_id"]):
+        try:
+            if accepted:
+                await applicant.send(
+                    f"✅ Ваша заявка {number} в {utils.SERVER_NAMES[server]} принята сотрудником {staff_member.mention}."
+                )
+            else:
+                await applicant.send(
+                    f"❌ Ваша заявка {number} в {utils.SERVER_NAMES[server]} отклонена {staff_member.mention}. "
+                    f"Причина: {reason or 'не указана'}"
+                )
+        except discord.HTTPException:
+            logger.warning("Не удалось отправить уведомление по заявке %s", number)
 
     # --- Действия по заявителю при одобрении ---
     if accepted and applicant is not None:
@@ -241,6 +258,21 @@ async def _decide_vacation(guild, staff_member, vac_id, accepted, reason):
                         )
                         role_warning = "у бота нет прав выдать роль (иерархия ролей)"
 
+    target_for_dm = await utils.get_member_safe(guild, vac.get("target_id"))
+    if target_for_dm is not None and consent_storage.has_consent(target_for_dm.id):
+        try:
+            if accepted:
+                await target_for_dm.send(
+                    f"✅ Ваша заявка {vac_id} на отпуск ({utils.SERVER_NAMES[vac['server']]}) принята сотрудником {staff_member.mention}."
+                )
+            else:
+                await target_for_dm.send(
+                    f"❌ Ваша заявка {vac_id} на отпуск ({utils.SERVER_NAMES[vac['server']]}) отклонена {staff_member.mention}. "
+                    f"Причина: {reason or 'не указана'}"
+                )
+        except discord.HTTPException:
+            logger.warning("Не удалось отправить уведомление по заявке на отпуск %s", vac_id)
+
     logs_channel = guild.get_channel(utils.LOGS_CHANNELS[vac["server"]])
     await _finalize_vacation_log_message(
         guild, vac, vac_id, result_label, accepted, staff_member, reason, logs_channel
@@ -286,3 +318,51 @@ async def _finalize_vacation_log_message(guild, vac, vac_id, result_label, accep
         if not accepted and reason:
             embed.add_field(name="Причина отказа", value=reason, inline=False)
         await logs_channel.send(embed=embed)
+
+
+# ============================== КОНТРАКТЫ ================================
+
+async def _decide_contract(guild, staff_member, number, accepted, reason):
+    item = storage.DATA["contracts"].get(number)
+    if item is None:
+        return False, f"Заявка {number} не найдена."
+    if item.get("status") != "pending":
+        return False, f"Заявка {number} уже обработана."
+    server = item["server"]
+    if not utils.is_recruiter(staff_member, server):
+        return False, "У вас нет прав обрабатывать заявки этого сервера."
+    item["status"] = "accepted" if accepted else "declined"
+    item["decided_by"] = staff_member.id
+    if reason:
+        item["decline_reason"] = reason
+    await storage.persist()
+    channel = guild.get_channel(config.CONTRACT_PAYOUT_CHANNELS[server])
+    if channel and item.get("message_id"):
+        try:
+            msg = await channel.fetch_message(item["message_id"])
+            if msg.embeds:
+                emb = msg.embeds[0]
+                emb.title = f"{emb.title} — {'✅ Принята' if accepted else '❌ Отклонена'}"
+                emb.color = discord.Color.green() if accepted else discord.Color.red()
+                emb.add_field(name="Обработал", value=staff_member.mention, inline=True)
+                if not accepted and reason:
+                    emb.add_field(name="Причина отказа", value=reason, inline=False)
+                await msg.edit(embed=emb, view=None)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            logger.exception("Не удалось обновить заявку на выплату %s", number)
+    member = await utils.get_member_safe(guild, item["requester_id"])
+    if member is not None and consent_storage.has_consent(member.id):
+        try:
+            if accepted:
+                await member.send(
+                    f"✅ Ваша заявка на выплату {number} ({utils.SERVER_NAMES[server]}) "
+                    f"принята сотрудником {staff_member.mention}."
+                )
+            else:
+                await member.send(
+                    f"❌ Ваша заявка на выплату {number} ({utils.SERVER_NAMES[server]}) "
+                    f"отклонена {staff_member.mention}. Причина: {reason or 'не указана'}"
+                )
+        except discord.HTTPException:
+            logger.warning("Не удалось отправить ЛС по заявке %s", number)
+    return True, f"Заявка {number} обработана: {'принята' if accepted else 'отклонена'}."
