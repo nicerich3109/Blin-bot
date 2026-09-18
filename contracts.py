@@ -9,7 +9,7 @@ from ui_decision import RequestDecisionView
 class ContractOptionSelect(discord.ui.Select):
     def __init__(self,server,key):
         self.server,self.key=server,key
-        item=next(i for i in feature_config.CONTRACT_BUTTONS[server] if i["key"]==key)
+        item=next(i for i in feature_feature_config.CONTRACT_BUTTONS[server] if i["key"]==key)
         options=item["options"][:10]
         super().__init__(placeholder="Выберите опцию из меню:",options=[
             discord.SelectOption(label=str(o["label"])[:100],value=str(o["value"])[:100],
@@ -66,6 +66,6 @@ async def publish_contract_panel(guild,server):
     channel=guild.get_channel(feature_config.CONTRACT_PANEL_CHANNELS[server])
     if channel is None: logger.error("Канал панели контрактов %s не найден",server); return
     embed=discord.Embed(title=feature_config.CONTRACT_PANEL_TITLES[server],description=feature_config.CONTRACT_PANEL_TEXTS[server],color=discord.Color.blurple())
-    if feature_config.CONTRACT_PANEL_IMAGES.get(server): embed.set_image(url=config.CONTRACT_PANEL_IMAGES[server])
+    if feature_config.CONTRACT_PANEL_IMAGES.get(server): embed.set_image(url=feature_config.CONTRACT_PANEL_IMAGES[server])
     await utils.ensure_persistent_message(channel,storage.DATA,f"contract_panel_{server}",[embed],ContractPanelView(server))
     await storage.persist()
