@@ -31,6 +31,8 @@ import config
 import feature_flags
 import storage
 import utils
+import consent_storage
+from consent_view import ConsentView, CONSENT_TEXT
 from logger_setup import logger
 from ui_decision import RequestDecisionView
 
@@ -123,7 +125,14 @@ class JoinInfoView(discord.ui.View):
                 ephemeral=True,
             )
             return
-        await interaction.response.send_modal(JoinModal("DN"))
+        if consent_storage.has_consent(interaction.user.id):
+            await interaction.response.send_modal(JoinModal("DN"))
+        else:
+            await interaction.response.send_message(
+                CONSENT_TEXT,
+                view=ConsentView(lambda: JoinModal("DN")),
+                ephemeral=True,
+            )
 
     async def on_phoenix(self, interaction: discord.Interaction):
         if not feature_flags.is_family_enabled("PHX"):
@@ -141,7 +150,14 @@ class JoinInfoView(discord.ui.View):
                 ephemeral=True,
             )
             return
-        await interaction.response.send_modal(JoinModal("PHX"))
+        if consent_storage.has_consent(interaction.user.id):
+            await interaction.response.send_modal(JoinModal("PHX"))
+        else:
+            await interaction.response.send_message(
+                CONSENT_TEXT,
+                view=ConsentView(lambda: JoinModal("PHX")),
+                ephemeral=True,
+            )
 
 
 def _cooldown_remaining(user_id) -> float:
