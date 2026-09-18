@@ -71,7 +71,7 @@ VACATION_INFO_TEXT = (
 
 # ================================ ПРОЧЕЕ ==================================
 
-DATA_FILE = os.getenv("BLIN_DATA_FILE", "data.json")
+DATA_FILE = os.getenv("BLIN_DATA_FILE", "/app/data/data.json")
 LOG_FILE = "bot.log"
 
 # Задержка перед архивированием обработанной заявки.
