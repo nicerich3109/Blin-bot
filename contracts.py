@@ -37,6 +37,22 @@ class ContractModal(discord.ui.Modal):
         values={}
         for i,field in enumerate(self.option.get("fields",[])[:5]):
             values[str(field.get("label",f"Поле {i+1}"))]=str(getattr(self,f"field_{i}").value)
+
+        # Количество для контрактов с поштучной оплатой должно быть целым.
+        if self.option.get("with_quantity"):
+            try:
+                quantity = int(values.get("Количество", "").strip())
+                if quantity < 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                await interaction.response.send_message(
+                    "❌ В поле «Количество» укажите целое неотрицательное число.",
+                    ephemeral=True,
+                )
+                return
+        else:
+            quantity = 1
+
         number=storage.next_contract_id(self.server)
         channel=interaction.guild.get_channel(feature_config.CONTRACT_PAYOUT_CHANNELS[self.server])
         if channel is None:
@@ -46,7 +62,16 @@ class ContractModal(discord.ui.Modal):
         for label,value in values.items(): embed.add_field(name=label[:256],value=value[:1024] or "—",inline=False)
         embed.add_field(name="Сервер",value=utils.SERVER_NAMES[self.server],inline=True)
         msg=await channel.send(embed=embed,view=RequestDecisionView("contract",number))
-        storage.DATA["contracts"][number]={"server":self.server,"requester_id":interaction.user.id,"option":self.option.get("label",self.key),"fields":values,"status":"pending","message_id":msg.id}
+        storage.DATA["contracts"][number]={
+            "server":self.server,
+            "requester_id":interaction.user.id,
+            "option":self.option.get("label",self.key),
+            "unit_price":self.option.get("price"),
+            "quantity":quantity,
+            "fields":values,
+            "status":"pending",
+            "message_id":msg.id,
+        }
         await storage.persist()
         await interaction.response.send_message(f"Заявка {number} отправлена на рассмотрение.",ephemeral=True)
 
