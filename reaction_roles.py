@@ -2,11 +2,12 @@
 """Роли по реакциям и кнопкам."""
 import discord
 import config, storage
+import bot_features_config as feature_config
 
 class ReactionRoleView(discord.ui.View):
     def __init__(self,key):
         super().__init__(timeout=None)
-        for cfg in config.REACTION_ROLE_MESSAGES[key].get("buttons",[])[:2]:
+        for cfg in feature_config.REACTION_ROLE_MESSAGES[key].get("buttons",[])[:2]:
             role_id=int(cfg["role_id"])
             button=discord.ui.Button(label=cfg["label"][:80],style=getattr(discord.ButtonStyle,cfg.get("style","primary"),discord.ButtonStyle.primary),custom_id=f"rr_{key}_{role_id}")
             async def callback(interaction,role_id=role_id):
