@@ -17,13 +17,13 @@ CONTRACT_PAYOUT_CHANNELS = {
 }
 
 CONTRACT_PANEL_CHANNELS = {
-    "PHX": 1525206310474485901,
-    "DN": 1372517581415514173,
+    "PHX": 1525152798843469884,
+    "DN": 1372267301159567579,
 }
 
 CONTRACT_PANEL_TITLES = {
-    "PHX": "Заявки на выплату контрактов — Phoenix",
-    "DN": "Заявки на выплату контрактов — Denver",
+    "PHX": "Заявки на выплату с контрактов — Phoenix",
+    "DN": "Заявки на выплату с контрактов — Denver",
 }
 
 CONTRACT_PANEL_TEXTS = {
@@ -76,11 +76,10 @@ CONTRACT_BUTTONS = {
             ],
         },
     ],
-
-    "DN": [
+     [
         {
-            "key": "contract_1",
-            "label": "Контракт 1",
+            "key": "contract_2",
+            "label": "Контракт 2",
             "style": "primary",
             "options": [
                 {
@@ -105,8 +104,8 @@ CONTRACT_BUTTONS = {
             ],
         },
     ],
-}
 
+    "DN": 
 # ======================== ДИСЦИПЛИНА ======================================
 
 DISCIPLINE_LOG_CHANNELS = {
