@@ -28,6 +28,7 @@ import re
 import discord
 
 import config
+import feature_flags
 import storage
 import utils
 from logger_setup import logger
@@ -105,6 +106,12 @@ class JoinInfoView(discord.ui.View):
         self.add_item(phoenix_btn)
 
     async def on_denver(self, interaction: discord.Interaction):
+        if not feature_flags.is_family_enabled("DN"):
+            await interaction.response.send_message(
+                "❌ Подача заявок в семью на сервер Denver сейчас отключена.",
+                ephemeral=True,
+            )
+            return
         remaining = _cooldown_remaining(interaction.user.id)
         if remaining > 0:
             await interaction.response.send_message(
@@ -117,6 +124,12 @@ class JoinInfoView(discord.ui.View):
         await interaction.response.send_modal(JoinModal("DN"))
 
     async def on_phoenix(self, interaction: discord.Interaction):
+        if not feature_flags.is_family_enabled("PHX"):
+            await interaction.response.send_message(
+                "❌ Подача заявок в семью на сервер Phoenix сейчас отключена.",
+                ephemeral=True,
+            )
+            return
         remaining = _cooldown_remaining(interaction.user.id)
         if remaining > 0:
             await interaction.response.send_message(
@@ -148,6 +161,13 @@ def _cooldown_remaining(user_id) -> float:
 
 
 async def create_join_ticket(interaction: discord.Interaction, server: str, form: dict):
+    if not feature_flags.is_family_enabled(server):
+        await interaction.followup.send(
+            f"❌ Подача заявок в семью на сервер {utils.SERVER_NAMES[server]} сейчас отключена.",
+            ephemeral=True,
+        )
+        return
+
     guild = interaction.guild
     number = storage.next_ticket_number(server)
 
