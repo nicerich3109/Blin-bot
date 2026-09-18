@@ -21,6 +21,9 @@ from discord.ext import commands
 import decisions
 import storage
 import vacations
+import discipline
+import config
+import discipline
 
 
 async def _autocomplete_number(interaction: discord.Interaction, current: str):
@@ -89,4 +92,24 @@ def register_commands(bot: commands.Bot):
         ok, message = await vacations.force_remove_vacation(
             interaction.guild, interaction.user, участник, причина
         )
+        await interaction.followup.send(message, ephemeral=True)
+
+
+    @bot.tree.command(name="выдать_выговор", description="Выдать дисциплинарное взыскание")
+    @app_commands.describe(
+        участник="Кому выдать взыскание",
+        причина="Причина взыскания",
+        отработка="Что необходимо отработать",
+    )
+    async def cmd_issue_warning(interaction: discord.Interaction, участник: discord.Member, причина: str, отработка: str):
+        if interaction.guild is None:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        ok, message = await discipline.issue_warning(
+            interaction.guild, interaction.user, участник, причина, отработка
+        )
+        server = "DN" if interaction.channel.id == config.DISCIPLINE_LOG_CHANNELS["DN"] else "PHX"
+        if interaction.channel.id in config.DISCIPLINE_LOG_CHANNELS.values():
+            await discipline.log_warning(interaction.guild, server, message)
         await interaction.followup.send(message, ephemeral=True)
