@@ -24,6 +24,8 @@ def find_kind(key: str):
         return KIND_JOIN, key
     if key in storage.DATA["vacations"]:
         return KIND_VACATION, key
+    if key in storage.DATA["contracts"]:
+        return KIND_CONTRACT, key
     return None, None
 
 
