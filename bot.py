@@ -47,6 +47,10 @@ class BlinBot(commands.Bot):
             if vac.get("status") == "pending":
                 self.add_view(RequestDecisionView("vacation", vac_id))
 
+        for contract_id, contract in storage.DATA["contracts"].items():
+            if contract.get("status") == "pending":
+                self.add_view(RequestDecisionView("contract", contract_id))
+
         register_commands(self)
 
         if config.GUILD_ID:
