@@ -2,6 +2,7 @@
 """Система дисциплинарных взысканий."""
 import discord
 import config, utils
+import bot_features_config as feature_config
 from logger_setup import logger
 async def ensure_discipline_roles(guild):
     result={}
@@ -26,7 +27,7 @@ async def issue_warning(guild,issuer,target,reason,workoff):
     try: await target.send(dm)
     except discord.HTTPException: logger.warning("Не удалось отправить дисциплинарное ЛС %s",target.id)
     server = "DN" if any(r.id == config.JOIN_SERVER_ROLE_DN for r in target.roles) else "PHX"
-    channel = guild.get_channel(config.DISCIPLINE_LOG_CHANNELS[server])
+    channel = guild.get_channel(feature_config.DISCIPLINE_LOG_CHANNELS[server])
     if channel:
         try:
             await channel.send(public)
