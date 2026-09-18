@@ -8,12 +8,14 @@ from ui_decision import RequestDecisionView
 class ContractOptionSelect(discord.ui.Select):
     def __init__(self,server,key):
         self.server,self.key=server,key
-        options=config.CONTRACT_BUTTONS[server][key]["options"][:10]
+        item=next(i for i in config.CONTRACT_BUTTONS[server] if i["key"]==key)
+        options=item["options"][:10]
         super().__init__(placeholder="Выберите опцию из меню:",options=[
             discord.SelectOption(label=str(o["label"])[:100],value=str(o["value"])[:100],
                                  description=str(o.get("description",""))[:100] or None) for o in options])
     async def callback(self,interaction):
-        option=next(o for o in config.CONTRACT_BUTTONS[self.server][self.key]["options"] if str(o["value"])==self.values[0])
+        item=next(i for i in config.CONTRACT_BUTTONS[self.server] if i["key"]==self.key)
+        option=next(o for o in item["options"] if str(o["value"])==self.values[0])
         await interaction.response.send_modal(ContractModal(self.server,self.key,option))
 
 class ContractOptionView(discord.ui.View):
