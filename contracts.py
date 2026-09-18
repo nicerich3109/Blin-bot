@@ -15,7 +15,7 @@ class ContractOptionSelect(discord.ui.Select):
             discord.SelectOption(label=str(o["label"])[:100],value=str(o["value"])[:100],
                                  description=str(o.get("description",""))[:100] or None) for o in options])
     async def callback(self,interaction):
-        item=next(i for i in config.CONTRACT_BUTTONS[self.server] if i["key"]==self.key)
+        item=next(i for i in feature_config.CONTRACT_BUTTONS[self.server] if i["key"]==self.key)
         option=next(o for o in item["options"] if str(o["value"])==self.values[0])
         await interaction.response.send_modal(ContractModal(self.server,self.key,option))
 
@@ -60,7 +60,7 @@ class ContractPanelButton(discord.ui.Button):
 class ContractPanelView(discord.ui.View):
     def __init__(self,server):
         super().__init__(timeout=None)
-        for item in config.CONTRACT_BUTTONS[server][:20]: self.add_item(ContractPanelButton(server,item["key"],item))
+        for item in feature_config.CONTRACT_BUTTONS[server][:20]: self.add_item(ContractPanelButton(server,item["key"],item))
 
 async def publish_contract_panel(guild,server):
     channel=guild.get_channel(feature_config.CONTRACT_PANEL_CHANNELS[server])
