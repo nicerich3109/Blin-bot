@@ -1,12 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Настройка дополнительных функций Blin.
-
-Здесь находятся настройки заявок на выплату контрактов,
-дисциплины и сообщений ролей.
-"""
-
-# ======================== КОНТРАКТЫ ========================================
+"""Настройки дополнительных функций Blin."""
 
 CONTRACT_PAYOUT_CHANNELS = {
     "PHX": 1525206310474485901,
@@ -33,120 +26,54 @@ CONTRACT_PANEL_IMAGES = {
     "DN": "",
 }
 
-# Максимум: 20 кнопок на сервер, 10 вариантов у кнопки, 5 полей в модальном окне.
+def _fields(with_quantity):
+    fields = [
+        {"label": "Статик #", "placeholder": "Укажите ваш статический ID", "required": True},
+        {"label": "Скрин выполненной работы", "placeholder": "ссылка на скриншот из imgur/yapx/ibb", "required": True},
+    ]
+    if with_quantity:
+        fields.append({"label": "Количество", "placeholder": "Укажите сколько рыбы вы сдали", "required": True})
+    return fields
+
+def _options(prefix, prices, with_quantity):
+    roman = ("I", "II", "III", "IV", "V")
+    return [
+        {
+            "value": f"{prefix.lower().replace(' ', '_')}_{roman[i].lower()}",
+            "label": f"{prefix} {roman[i]} - {price}",
+            "description": "Заявка на выплату",
+            "modal_title": "Заявка на выплату",
+            "fields": _fields(with_quantity),
+        }
+        for i, price in enumerate(prices)
+    ]
+
 CONTRACT_BUTTONS = {
     "PHX": [
-        {
-            "key": "contract_1",
-            "label": "Контракт 1",
-            "style": "primary",
-            "options": [
-                {
-                    "value": "option_1",
-                    "label": "Выплата",
-                    "description": "Заявка на получение премии",
-                    "modal_title": "Заявка на выплату",
-                    "fields": [
-                        {
-                            "label": "Номер контракта",
-                            "placeholder": "Укажите номер контракта",
-                            "required": True,
-                        },
-                        {
-                            "label": "Что выполнено",
-                            "placeholder": "Опишите выполненный контракт",
-                            "paragraph": True,
-                            "required": True,
-                        },
-                    ],
-                },
-            ],
-        },
-        {
-            "key": "contract_2",
-            "label": "Контракт 2",
-            "style": "primary",
-            "options": [
-                {
-                    "value": "option_1",
-                    "label": "Выплата",
-                    "description": "Заявка на получение премии",
-                    "modal_title": "Заявка на выплату",
-                    "fields": [
-                        {
-                            "label": "Номер контракта",
-                            "placeholder": "Укажите номер контракта",
-                            "required": True,
-                        },
-                        {
-                            "label": "Что выполнено",
-                            "placeholder": "Опишите выполненный контракт",
-                            "paragraph": True,
-                            "required": True,
-                        },
-                    ],
-                },
-            ],
-        },
+        {"key": "seafood", "label": "Дары моря", "style": "primary",
+         "options": _options("Дары моря", ("1,2234", "1,2512", "0,8893", "0,7619"), True)},
+        {"key": "metallurgy", "label": "Металлургия", "style": "primary",
+         "options": _options("Металлургия", ("15,000", "20,000", "22,000", "25,000"), False)},
+        {"key": "goods", "label": "Товары", "style": "primary",
+         "options": _options("Товары", ("15,000", "17,500", "20,000", "25,000"), False)},
+        {"key": "atelier", "label": "Ателье", "style": "primary",
+         "options": _options("Ателье", ("700", "800", "850", "900", "950"), True)},
     ],
     "DN": [
-        {
-            "key": "contract_1",
-            "label": "Контракт 1",
-            "style": "primary",
-            "options": [
-                {
-                    "value": "option_1",
-                    "label": "Выплата",
-                    "description": "Заявка на получение премии",
-                    "modal_title": "Заявка на выплату",
-                    "fields": [
-                        {
-                            "label": "Номер контракта",
-                            "placeholder": "Укажите номер контракта",
-                            "required": True,
-                        },
-                        {
-                            "label": "Что выполнено",
-                            "placeholder": "Опишите выполненный контракт",
-                            "paragraph": True,
-                            "required": True,
-                        },
-                    ],
-                },
-            ],
-        },
+        {"key": "seafood", "label": "Дары моря", "style": "primary",
+         "options": _options("Дары моря", ("1,2234", "1,2512", "0,8893", "0,7619"), True)},
+        {"key": "metallurgy", "label": "Металлургия", "style": "primary",
+         "options": _options("Металлургия", ("15,000", "20,000", "22,000", "25,000"), False)},
+        {"key": "goods", "label": "Товары", "style": "primary",
+         "options": _options("Товары", ("15,000", "17,500", "20,000", "25,000"), False)},
+        {"key": "atelier", "label": "Ателье", "style": "primary",
+         "options": _options("Ателье", ("700", "800", "850", "900", "950"), True)},
     ],
 }
-
-# ======================== ДИСЦИПЛИНА =======================================
 
 DISCIPLINE_LOG_CHANNELS = {
     "PHX": 1550559942480502794,
     "DN": 1550560587224842270,
 }
 
-# ======================== РОЛИ ПО РЕАКЦИИ/КНОПКАМ ==========================
-
-# mode = "reaction" или "button".
-# Для reaction: role_id_by_emoji = {"✅": ID_РОЛИ}
-# Для button: buttons = максимум 2 кнопки.
-# image можно оставить пустым.
-REACTION_ROLE_MESSAGES = {
-    # "example": {
-    #     "channel_id": 123456789,
-    #     "text": "Выберите роль",
-    #     "image": "",
-    #     "mode": "button",
-    #     "buttons": [
-    #         {
-    #             "label": "Получить роль",
-    #             "role_id": 123456789,
-    #             "style": "success",
-    #         },
-    #     ],
-    #     "role_id_by_emoji": {
-    #         "✅": 123456789,
-    #     },
-    # }
-}
+REACTION_ROLE_MESSAGES = {}
