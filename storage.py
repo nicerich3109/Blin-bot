@@ -20,6 +20,7 @@ DEFAULT_DATA = {
     "vacations": {},            # id заявки на отпуск ("DN-VAC-001") -> dict
     "persistent_messages": {},  # ключ -> message_id
     "join_cooldowns": {},       # user_id (str) -> ISO-время последней поданной заявки
+    "contracts": {},           # номер заявки на выплату -> dict
 }
 
 
@@ -60,3 +61,9 @@ def next_ticket_number(server: str) -> str:
 def next_vacation_id(server: str) -> str:
     DATA["vac_counters"][server] += 1
     return f"{server}-VAC-{DATA['vac_counters'][server]:03d}"
+
+
+def next_contract_id(server: str) -> str:
+    DATA["counters"].setdefault("CONTRACT", 0)
+    DATA["counters"]["CONTRACT"] += 1
+    return f"{server}-CON-{DATA['counters']['CONTRACT']:03d}"
