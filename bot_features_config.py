@@ -26,24 +26,26 @@ CONTRACT_PANEL_IMAGES = {
     "DN": "",
 }
 
-def _fields(with_quantity):
+def _fields(with_quantity, quantity_placeholder="Укажите количество"):
     fields = [
         {"label": "Статик #", "placeholder": "Укажите ваш статический ID", "required": True},
         {"label": "Скрин выполненной работы", "placeholder": "ссылка на скриншот из imgur/yapx/ibb", "required": True},
     ]
     if with_quantity:
-        fields.append({"label": "Количество", "placeholder": "Укажите сколько рыбы вы сдали", "required": True})
+        fields.append({"label": "Количество", "placeholder": quantity_placeholder, "required": True})
     return fields
 
-def _options(prefix, prices, with_quantity):
+def _options(prefix, prices, with_quantity, quantity_placeholder="Укажите количество"):
     roman = ("I", "II", "III", "IV", "V")
     return [
         {
             "value": f"{prefix.lower().replace(' ', '_')}_{roman[i].lower()}",
             "label": f"{prefix} {roman[i]} - {price}",
+            "price": price,
+            "with_quantity": with_quantity,
             "description": "Заявка на выплату",
             "modal_title": "Заявка на выплату",
-            "fields": _fields(with_quantity),
+            "fields": _fields(with_quantity, quantity_placeholder),
         }
         for i, price in enumerate(prices)
     ]
@@ -57,7 +59,7 @@ CONTRACT_BUTTONS = {
         {"key": "goods", "label": "Товары", "style": "primary",
          "options": _options("Товары", ("15,000", "17,500", "20,000", "25,000"), False)},
         {"key": "atelier", "label": "Ателье", "style": "primary",
-         "options": _options("Ателье", ("700", "800", "850", "900", "950"), True)},
+         "options": _options("Ателье", ("700", "800", "850", "900", "950"), True, "Укажите сколько одежды вы сдали")},
     ],
     "DN": [
         {"key": "seafood", "label": "Дары моря", "style": "primary",
