@@ -23,7 +23,6 @@ import storage
 import vacations
 import discipline
 import config
-import discipline
 
 
 async def _autocomplete_number(interaction: discord.Interaction, current: str):
@@ -37,6 +36,9 @@ async def _autocomplete_number(interaction: discord.Interaction, current: str):
     for vac_id, vac in storage.DATA["vacations"].items():
         if vac["status"] == "pending" and current in vac_id:
             choices.append(app_commands.Choice(name=f"{vac_id} (отпуск)", value=vac_id))
+    for contract_id, item in storage.DATA["contracts"].items():
+        if item["status"] == "pending" and current in contract_id:
+            choices.append(app_commands.Choice(name=f"{contract_id} (выплата)", value=contract_id))
 
     return choices[:25]
 
