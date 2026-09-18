@@ -137,19 +137,6 @@ async def on_ready():
             logger.exception("Ошибка при инициализации таймеров отпусков на сервере %s", guild.id)
 
 
-def main():
-    if not config.TOKEN or config.TOKEN == "ВСТАВЬТЕ_ТОКЕН_СЮДА":
-        raise SystemExit(
-            "Не задан токен бота. Установите переменную окружения DISCORD_TOKEN "
-            "или впишите токен в config.py."
-        )
-    bot.run(config.TOKEN)
-
-
-if __name__ == "__main__":
-    main()
-
-
 @bot.event
 async def on_raw_reaction_add(payload):
     try:
@@ -163,3 +150,16 @@ async def on_raw_reaction_remove(payload):
         await handle_reaction_remove(payload)
     except Exception:
         logger.exception("Ошибка обработки удаления реакции")
+
+
+def main():
+    if not config.TOKEN or config.TOKEN == "ВСТАВЬТЕ_ТОКЕН_СЮДА":
+        raise SystemExit(
+            "Не задан токен бота. Установите переменную окружения DISCORD_TOKEN "
+            "или впишите токен в config.py."
+        )
+    bot.run(config.TOKEN)
+
+
+if __name__ == "__main__":
+    main()
