@@ -100,6 +100,8 @@ class JoinInfoView(discord.ui.View):
             style=discord.ButtonStyle.danger,  # красная
             custom_id="join_apply_phx",
         )
+        denver_btn.disabled = not feature_flags.is_family_enabled("DN")
+        phoenix_btn.disabled = not feature_flags.is_family_enabled("PHX")
         denver_btn.callback = self.on_denver
         phoenix_btn.callback = self.on_phoenix
         self.add_item(denver_btn)
