@@ -31,6 +31,7 @@ import asyncio
 import discord
 
 import config
+import feature_flags
 import storage
 import utils
 from logger_setup import logger
@@ -56,6 +57,13 @@ class VacationModal(discord.ui.Modal, title="Заявка на отпуск"):
         self.server = server
 
     async def on_submit(self, interaction: discord.Interaction):
+        if not feature_flags.is_vacation_enabled(self.server):
+            await interaction.response.send_message(
+                f"❌ Подача заявок на отпуск для {utils.SERVER_NAMES[self.server]} сейчас отключена.",
+                ephemeral=True,
+            )
+            return
+
         until_date = utils.parse_vacation_date(str(self.until_date_input.value))
         if until_date is None:
             await interaction.response.send_message(
@@ -113,15 +121,29 @@ class VacationInfoView(discord.ui.View):
             style=discord.ButtonStyle.success,
             custom_id=f"vacation_apply_{server}",
         )
+        button.disabled = not feature_flags.is_vacation_enabled(server)
         button.callback = self.apply
         self.add_item(button)
 
     async def apply(self, interaction: discord.Interaction):
+        if not feature_flags.is_vacation_enabled(self.server):
+            await interaction.response.send_message(
+                f"❌ Подача заявок на отпуск для {utils.SERVER_NAMES[self.server]} сейчас отключена.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.send_modal(VacationModal(self.server))
 
 
 async def create_vacation_request(interaction: discord.Interaction, server: str,
                                    target_id, until_dt: datetime, reason: str):
+    if not feature_flags.is_vacation_enabled(server):
+        await interaction.followup.send(
+            f"❌ Подача заявок на отпуск для {utils.SERVER_NAMES[server]} сейчас отключена.",
+            ephemeral=True,
+        )
+        return
+
     guild = interaction.guild
     vac_id = storage.next_vacation_id(server)
 
