@@ -23,12 +23,12 @@ from vacations import (
 from commands import register_commands
 
 intents = discord.Intents.default()
-intents.members = True  # нужно для управления ролями/никами
+intents.members = True
+intents.message_content = True
 
 
 class BlinBot(commands.Bot):
     async def setup_hook(self):
-        # Персистентные view — чтобы кнопки работали и после рестарта бота.
         self.add_view(JoinInfoView())
         self.add_view(VacationInfoView("DN"))
         self.add_view(VacationInfoView("PHX"))
@@ -59,6 +59,15 @@ async def on_ready():
     logger.info("Бот запущен как %s (ID: %s)", bot.user, bot.user.id)
 
     for guild in bot.guilds:
+        configured_channel_ids = {
+            config.RECRUIT_INFO_CHANNEL,
+            config.VACATION_CHANNEL_DN,
+            config.VACATION_CHANNEL_PHX,
+        }
+        if not any(guild.get_channel(channel_id) is not None for channel_id in configured_channel_ids):
+            logger.info("Пропускаю гильдию %s (%s): каналы Blin в config.py не найдены", guild.name, guild.id)
+            continue
+
         recruit_channel = guild.get_channel(config.RECRUIT_INFO_CHANNEL)
         if recruit_channel:
             embed = discord.Embed(
@@ -74,18 +83,21 @@ async def on_ready():
             logger.error("Канал заявок на вступление (ID %s) не найден", config.RECRUIT_INFO_CHANNEL)
 
         for server in ("DN", "PHX"):
+            vacation_channel_id = utils.VACATION_CHANNELS[server]
+            if guild.get_channel(vacation_channel_id) is None:
+                logger.info("Канал отпуска %s (ID %s) не найден в гильдии %s — пропускаю", server, vacation_channel_id, guild.id)
+                continue
             try:
                 await refresh_vacation_message(guild, server)
-            except discord.HTTPException:
+            except (discord.HTTPException, discord.InvalidData):
                 logger.exception("Не удалось обновить сообщение отпуска для %s", server)
 
-        # При старте закрываем уже просроченные отпуска и восстанавливаем таймеры.
         try:
             changed = await check_and_expire_vacations(guild)
             for server in changed:
                 try:
                     await refresh_vacation_message(guild, server)
-                except discord.HTTPException:
+                except (discord.HTTPException, discord.InvalidData):
                     logger.exception("Не удалось обновить список отпускников для %s", server)
             await restore_vacation_schedules(guild)
         except Exception:
