@@ -9,7 +9,7 @@ from ui_decision import RequestDecisionView
 class ContractOptionSelect(discord.ui.Select):
     def __init__(self,server,key):
         self.server,self.key=server,key
-        item=next(i for i in feature_feature_config.CONTRACT_BUTTONS[server] if i["key"]==key)
+        item=next(i for i in feature_config.CONTRACT_BUTTONS[server] if i["key"]==key)
         options=item["options"][:10]
         super().__init__(placeholder="Выберите опцию из меню:",options=[
             discord.SelectOption(label=str(o["label"])[:100],value=str(o["value"])[:100],
