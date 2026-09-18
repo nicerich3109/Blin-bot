@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Хранилище согласий на системные личные уведомления."""
 import json, os, asyncio
-CONSENT_FILE = "consents.json"
+
+CONSENT_FILE = os.getenv("BLIN_CONSENT_FILE", "/app/data/consents.json")
 _lock = asyncio.Lock()
 def _load():
     if not os.path.exists(CONSENT_FILE): return {}
