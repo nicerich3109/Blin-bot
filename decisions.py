@@ -4,6 +4,8 @@
 """
 
 import asyncio
+import math
+from decimal import Decimal, InvalidOperation
 
 import discord
 
@@ -325,6 +327,39 @@ async def _finalize_vacation_log_message(guild, vac, vac_id, result_label, accep
 
 # ============================== КОНТРАКТЫ ================================
 
+def _contract_payout(item):
+    """Возвращает (целая выплата, количество, цена за единицу)."""
+    option = str(item.get("option", ""))
+    price_text = item.get("unit_price")
+
+    if price_text is None and " - " in option:
+        price_text = option.rsplit(" - ", 1)[1].strip()
+    if price_text is None:
+        return 0, 0, Decimal("0")
+
+    try:
+        unit_price = Decimal(str(price_text).replace(" ", "").replace(",", "."))
+    except InvalidOperation:
+        return 0, 0, Decimal("0")
+
+    quantity = item.get("quantity")
+    if quantity is None:
+        # Старые заявки: количество есть только у контрактов с поштучной оплатой.
+        quantity = 1
+
+    try:
+        quantity = int(str(quantity).strip())
+    except (TypeError, ValueError):
+        quantity = 1
+
+    if quantity < 0:
+        quantity = 0
+
+    payout = math.floor(unit_price * quantity)
+    return payout, quantity, unit_price
+
+
+
 async def _decide_contract(guild, staff_member, number, accepted, reason):
     item = storage.DATA["contracts"].get(number)
     if item is None:
@@ -350,6 +385,10 @@ async def _decide_contract(guild, staff_member, number, accepted, reason):
                 emb.add_field(name="Обработал", value=staff_member.mention, inline=True)
                 if not accepted and reason:
                     emb.add_field(name="Причина отказа", value=reason, inline=False)
+                if accepted:
+                    payout, quantity, unit_price = _contract_payout(item)
+                    emb.add_field(name="Выплатить", value=f"{payout:,}".replace(",", " "), inline=True)
+                    emb.add_field(name="Кол-во", value=str(quantity), inline=True)
                 await msg.edit(embed=emb, view=None)
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             logger.exception("Не удалось обновить заявку на выплату %s", number)
