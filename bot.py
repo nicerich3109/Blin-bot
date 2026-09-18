@@ -55,7 +55,13 @@ class BlinBot(commands.Bot):
 
         if config.GUILD_ID:
             guild_obj = discord.Object(id=config.GUILD_ID)
+
+            # Регистрируем команды только на рабочем сервере.
+            # Ранее команды одновременно оставались глобальными, из-за чего
+            # Discord мог показывать два одинаковых экземпляра команды.
             self.tree.copy_global_to(guild=guild_obj)
+            self.tree.clear_commands(guild=None)
+            await self.tree.sync()
             await self.tree.sync(guild=guild_obj)
         else:
             await self.tree.sync()
