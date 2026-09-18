@@ -111,7 +111,4 @@ def register_commands(bot: commands.Bot):
         ok, message = await discipline.issue_warning(
             interaction.guild, interaction.user, участник, причина, отработка
         )
-        server = "DN" if interaction.channel.id == config.DISCIPLINE_LOG_CHANNELS["DN"] else "PHX"
-        if interaction.channel.id in config.DISCIPLINE_LOG_CHANNELS.values():
-            await discipline.log_warning(interaction.guild, server, message)
         await interaction.followup.send(message, ephemeral=True)
