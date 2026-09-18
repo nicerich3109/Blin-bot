@@ -14,8 +14,6 @@ def collect_roles(guilds):
     roles = []
     for guild in guilds:
         for role in guild.roles:
-            if role.is_default():
-                continue
             roles.append({
                 "guild_id": guild.id,
                 "role_id": role.id,
