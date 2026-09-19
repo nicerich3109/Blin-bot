@@ -74,6 +74,9 @@ def register_commands(bot: commands.Bot):
         if interaction.guild is None:
             await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
             return
+        if not consent_storage.has_consent(interaction.user.id):
+            await interaction.response.send_message("❌ Сначала дайте согласие на системные уведомления бота. После этого функции бота станут доступны.", ephemeral=True)
+            return
         kind, key = decisions.find_kind(номер)
         if kind is None:
             await interaction.response.send_message(f"Заявка `{номер}` не найдена.", ephemeral=True)
@@ -88,6 +91,9 @@ def register_commands(bot: commands.Bot):
     async def cmd_decline(interaction: discord.Interaction, номер: str, причина: str):
         if interaction.guild is None:
             await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        if not consent_storage.has_consent(interaction.user.id):
+            await interaction.response.send_message("❌ Сначала дайте согласие на системные уведомления бота. После этого функции бота станут доступны.", ephemeral=True)
             return
         kind, key = decisions.find_kind(номер)
         if kind is None:
@@ -113,6 +119,9 @@ def register_commands(bot: commands.Bot):
         if interaction.guild is None:
             await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
             return
+        if not consent_storage.has_consent(interaction.user.id):
+            await interaction.response.send_message("❌ Сначала дайте согласие на системные уведомления бота. После этого функции бота станут доступны.", ephemeral=True)
+            return
         await interaction.response.defer(ephemeral=True, thinking=True)
         ok, message = await vacations.force_remove_vacation(
             interaction.guild, interaction.user, участник, причина
@@ -134,6 +143,9 @@ def register_commands(bot: commands.Bot):
     async def cmd_issue_warning(interaction: discord.Interaction, сервер: str, участник: discord.Member, причина: str, отработка: str):
         if interaction.guild is None:
             await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        if not consent_storage.has_consent(interaction.user.id):
+            await interaction.response.send_message("❌ Сначала дайте согласие на системные уведомления бота. После этого функции бота станут доступны.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
         ok, message = await discipline.issue_warning(
