@@ -4,6 +4,7 @@ import discord
 import config, storage, utils
 import bot_features_config as feature_config
 from logger_setup import logger
+from consent_view import ensure_consent
 from ui_decision import RequestDecisionView
 
 class ContractOptionSelect(discord.ui.Select):
@@ -15,6 +16,8 @@ class ContractOptionSelect(discord.ui.Select):
             discord.SelectOption(label=str(o["label"])[:100],value=str(o["value"])[:100],
                                  description=str(o.get("description",""))[:100] or None) for o in options])
     async def callback(self,interaction):
+        if not await ensure_consent(interaction):
+            return
         item=next(i for i in feature_config.CONTRACT_BUTTONS[self.server] if i["key"]==self.key)
         option=next(o for o in item["options"] if str(o["value"])==self.values[0])
         await interaction.response.send_modal(ContractModal(self.server,self.key,option))
@@ -34,6 +37,8 @@ class ContractModal(discord.ui.Modal):
                 required=bool(field.get("required",True)),max_length=min(int(field.get("max_length",1000)),4000))
             setattr(self,f"field_{i}",item); self.add_item(item)
     async def on_submit(self,interaction):
+        if not await ensure_consent(interaction):
+            return
         values={}
         for i,field in enumerate(self.option.get("fields",[])[:5]):
             values[str(field.get("label",f"Поле {i+1}"))]=str(getattr(self,f"field_{i}").value)
@@ -80,6 +85,8 @@ class ContractPanelButton(discord.ui.Button):
         super().__init__(label=item["label"][:80],style=getattr(discord.ButtonStyle,item.get("style","primary"),discord.ButtonStyle.primary),custom_id=f"contract_panel_{server}_{key}")
         self.server,self.key=server,key
     async def callback(self,interaction):
+        if not await ensure_consent(interaction):
+            return
         await interaction.response.send_message("Выберите опцию из меню:",view=ContractOptionView(self.server,self.key),ephemeral=True)
 
 class ContractPanelView(discord.ui.View):
