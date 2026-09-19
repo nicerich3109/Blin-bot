@@ -32,7 +32,7 @@ import feature_flags
 import storage
 import utils
 import consent_storage
-from consent_view import ConsentView, CONSENT_TEXT
+from consent_view import ConsentView, CONSENT_TEXT, ensure_consent
 from logger_setup import logger
 from ui_decision import RequestDecisionView
 
@@ -278,6 +278,8 @@ class ObzvonChannelSelectView(discord.ui.View):
         self.add_item(select)
 
     async def on_select(self, interaction: discord.Interaction):
+        if not await ensure_consent(interaction):
+            return
         channel_id = int(interaction.data["values"][0])
         await interaction.response.defer(ephemeral=True, thinking=True)
         ok, message = await call_to_obzvon(interaction.guild, self.number, channel_id)
