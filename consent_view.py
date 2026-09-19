@@ -51,3 +51,14 @@ class StandaloneConsentView(discord.ui.View):
             "✅ Согласие сохранено. Теперь вам доступны функции бота и системные уведомления в ЛС.",
             ephemeral=True,
         )
+
+
+async def ensure_consent(interaction):
+    """Проверяет согласие перед использованием обычных функций бота."""
+    if consent_storage.has_consent(interaction.user.id):
+        return True
+    await interaction.response.send_message(
+        "❌ Для использования этой функции необходимо дать согласие на системные уведомления бота.",
+        ephemeral=True,
+    )
+    return False
