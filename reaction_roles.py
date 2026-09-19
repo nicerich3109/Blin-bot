@@ -3,6 +3,7 @@
 import discord
 import config, storage
 import bot_features_config as feature_config
+from consent_view import ensure_consent
 
 class ReactionRoleView(discord.ui.View):
     def __init__(self,key):
@@ -11,6 +12,8 @@ class ReactionRoleView(discord.ui.View):
             role_id=int(cfg["role_id"])
             button=discord.ui.Button(label=cfg["label"][:80],style=getattr(discord.ButtonStyle,cfg.get("style","primary"),discord.ButtonStyle.primary),custom_id=f"rr_{key}_{role_id}")
             async def callback(interaction,role_id=role_id):
+                if not await ensure_consent(interaction):
+                    return
                 role=interaction.guild.get_role(role_id)
                 if role is None:
                     await interaction.response.send_message("Роль не найдена.",ephemeral=True); return
