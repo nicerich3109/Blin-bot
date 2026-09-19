@@ -11,6 +11,7 @@ import feature_flags
 import storage
 import utils
 from logger_setup import logger
+from consent_view import ensure_consent
 from ui_decision import RequestDecisionView
 
 
@@ -25,6 +26,8 @@ class VacationModal(discord.ui.Modal, title="Заявка на отпуск"):
         self.server = server
 
     async def on_submit(self, interaction: discord.Interaction):
+        if not await ensure_consent(interaction):
+            return
         if not feature_flags.is_vacation_enabled(self.server):
             await interaction.response.send_message(f"❌ Подача заявок на отпуск для {utils.SERVER_NAMES[self.server]} сейчас отключена.", ephemeral=True)
             return
@@ -59,6 +62,8 @@ class VacationInfoView(discord.ui.View):
         self.add_item(button)
 
     async def apply(self, interaction: discord.Interaction):
+        if not await ensure_consent(interaction):
+            return
         if not feature_flags.is_vacation_enabled(self.server):
             await interaction.response.send_message(f"❌ Подача заявок на отпуск для {utils.SERVER_NAMES[self.server]} сейчас отключена.", ephemeral=True)
             return
