@@ -10,6 +10,7 @@ import discord
 
 import decisions
 from logger_setup import logger
+from consent_view import ensure_consent
 
 
 class RequestDecisionView(discord.ui.View):
@@ -49,6 +50,8 @@ class RequestDecisionView(discord.ui.View):
         self.add_item(decline_btn)
 
     async def on_accept(self, interaction: discord.Interaction):
+        if not await ensure_consent(interaction):
+            return
         await interaction.response.defer(ephemeral=True, thinking=True)
         ok, message = await decisions.decide_request(
             interaction.guild, interaction.user, self.kind, self.key, accepted=True
@@ -56,9 +59,13 @@ class RequestDecisionView(discord.ui.View):
         await interaction.followup.send(message, ephemeral=True)
 
     async def on_decline(self, interaction: discord.Interaction):
+        if not await ensure_consent(interaction):
+            return
         await interaction.response.send_modal(DeclineReasonModal(self.kind, self.key))
 
     async def on_call(self, interaction: discord.Interaction):
+        if not await ensure_consent(interaction):
+            return
         # Ленивый импорт — applications.py импортирует этот модуль, поэтому
         # импорт на уровне модуля создал бы циклическую зависимость.
         import storage
