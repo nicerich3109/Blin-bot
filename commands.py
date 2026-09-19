@@ -20,6 +20,8 @@ from discord.ext import commands
 
 import decisions
 import storage
+import consent_storage
+from consent_view import CONSENT_TEXT, StandaloneConsentView
 import vacations
 import discipline
 import config
@@ -44,6 +46,27 @@ async def _autocomplete_number(interaction: discord.Interaction, current: str):
 
 
 def register_commands(bot: commands.Bot):
+    @bot.tree.command(name="опубликовать_согласие", description="Опубликовать сообщение с согласием на уведомления")
+    @app_commands.default_permissions(administrator=True)
+    async def cmd_publish_consent(interaction: discord.Interaction):
+        if interaction.guild is None:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("У вас нет прав администратора.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="Согласие на системные уведомления Blin",
+            description=CONSENT_TEXT,
+            color=discord.Color.blurple(),
+        )
+        await interaction.channel.send(embed=embed, view=StandaloneConsentView())
+        await interaction.response.send_message(
+            "✅ Сообщение с согласием опубликовано в этом канале.",
+            ephemeral=True,
+        )
+
     @bot.tree.command(name="принять", description="Принять заявку (на вступление или отпуск)")
     @app_commands.describe(номер="Номер заявки, например DN-001 или DN-VAC-001")
     @app_commands.autocomplete(номер=_autocomplete_number)
