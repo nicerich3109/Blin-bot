@@ -24,6 +24,7 @@ from commands import register_commands
 from contracts import ContractPanelView, publish_contract_panel
 from discipline import ensure_discipline_roles
 from roles_data import save_roles
+from consent_view import StandaloneConsentView
 from reaction_roles import publish_reaction_role_messages, handle_reaction_add, handle_reaction_remove
 
 intents = discord.Intents.default()
@@ -35,6 +36,7 @@ intents.reactions = True
 class BlinBot(commands.Bot):
     async def setup_hook(self):
         self.add_view(JoinInfoView())
+        self.add_view(StandaloneConsentView())
         self.add_view(VacationInfoView("DN"))
         self.add_view(VacationInfoView("PHX"))
         self.add_view(ContractPanelView("DN"))
