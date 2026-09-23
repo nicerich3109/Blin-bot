@@ -5,3 +5,6 @@ bot.log
 __pycache__/
 consents.json
 consents.json.tmp
+
+data/data.json
+data/data.json.tmp
