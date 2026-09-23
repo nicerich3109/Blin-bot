@@ -25,6 +25,7 @@ from consent_view import CONSENT_TEXT, StandaloneConsentView
 import vacations
 import discipline
 import config
+import utils
 
 
 async def _autocomplete_number(interaction: discord.Interaction, current: str):
@@ -66,6 +67,60 @@ def register_commands(bot: commands.Bot):
             "✅ Сообщение с согласием опубликовано в этом канале.",
             ephemeral=True,
         )
+
+    @bot.tree.command(name="информация_о_человеке", description="Показать сохранённую информацию по заявкам пользователя")
+    @app_commands.describe(участник="Пользователь, информацию о котором нужно показать")
+    async def cmd_person_info(interaction: discord.Interaction, участник: discord.Member):
+        if interaction.guild is None:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        if not consent_storage.has_consent(interaction.user.id):
+            await interaction.response.send_message(
+                "❌ Сначала дайте согласие на системные уведомления бота. После этого функции бота станут доступны.",
+                ephemeral=True,
+            )
+            return
+
+        applications = [
+            (number, app) for number, app in storage.DATA["applications"].items()
+            if int(app.get("applicant_id", 0)) == участник.id
+        ]
+        if not applications:
+            await interaction.response.send_message(
+                f"❌ Сохранённых заявок пользователя {участник.mention} не найдено.",
+                ephemeral=True,
+            )
+            return
+
+        allowed = []
+        for number, app in applications:
+            server = app.get("server")
+            if interaction.user.guild_permissions.administrator or (
+                server in utils.SERVER_NAMES and utils.is_recruiter(interaction.user, server)
+            ):
+                allowed.append((number, app))
+
+        if not allowed:
+            await interaction.response.send_message(
+                "❌ У вас нет прав просматривать заявки этого пользователя.",
+                ephemeral=True,
+            )
+            return
+
+        embeds = []
+        for number, app in allowed[-10:]:
+            server = app.get("server", "—")
+            embed = discord.Embed(title=f"Заявка {number}", color=discord.Color.gold())
+            embed.add_field(name="Никнейм", value=str(app.get("nickname", "—")), inline=False)
+            embed.add_field(name="Статик #", value=str(app.get("static", "—")), inline=True)
+            embed.add_field(name="OOC возраст", value=str(app.get("ooc_age", "—")), inline=True)
+            embed.add_field(name="OOC имя", value=str(app.get("ooc_name", "—")), inline=True)
+            embed.add_field(name="Сервер", value=utils.SERVER_NAMES.get(server, server), inline=True)
+            embed.add_field(name="В каких семьях были", value=str(app.get("previous_families", "—")), inline=False)
+            embed.set_footer(text=f"Discord: {участник} ({участник.id})")
+            embeds.append(embed)
+
+        await interaction.response.send_message(embeds=embeds, ephemeral=True)
 
     @bot.tree.command(name="принять", description="Принять заявку (на вступление или отпуск)")
     @app_commands.describe(номер="Номер заявки, например DN-001 или DN-VAC-001")
