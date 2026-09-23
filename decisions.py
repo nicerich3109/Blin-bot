@@ -20,6 +20,69 @@ KIND_JOIN = "join"
 KIND_VACATION = "vacation"
 KIND_CONTRACT = "contract"
 
+# Отложенное удаление обработанных тикетов. Данные заявки остаются в DATA.
+_TICKET_DELETE_TASKS = {}
+
+
+def schedule_join_ticket_deletion(guild: discord.Guild, number: str):
+    """Запланировать удаление обработанного тикета через заданную задержку."""
+    app = storage.DATA["applications"].get(number)
+    if not app or app.get("status") == "pending" or app.get("channel_deleted"):
+        return
+    old_task = _TICKET_DELETE_TASKS.get(number)
+    if old_task and not old_task.done():
+        old_task.cancel()
+    _TICKET_DELETE_TASKS[number] = asyncio.create_task(
+        _delete_join_ticket_after_delay(guild, number)
+    )
+
+
+async def _delete_join_ticket_after_delay(guild: discord.Guild, number: str):
+    delay = max(0, int(config.TICKET_DELETE_DELAY_SECONDS))
+    app = storage.DATA["applications"].get(number)
+    if not app:
+        return
+    try:
+        delete_at = app.get("delete_at")
+        if delete_at:
+            target = utils.parse_stored_datetime(delete_at)
+            remaining = (target - utils.now()).total_seconds()
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+        elif delay:
+            await asyncio.sleep(delay)
+
+        app = storage.DATA["applications"].get(number)
+        if not app or app.get("status") == "pending" or app.get("channel_deleted"):
+            return
+
+        channel_id = app.get("channel_id")
+        if channel_id:
+            channel = guild.get_channel(channel_id)
+            if channel is not None:
+                try:
+                    await channel.delete(reason=f"Заявка {number} обработана более {delay} секунд назад")
+                    logger.info("Канал заявки %s удалён после обработки", number)
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    logger.exception("Не удалось удалить канал заявки %s", number)
+        app["channel_deleted"] = True
+        await storage.persist()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("Ошибка отложенного удаления заявки %s", number)
+    finally:
+        _TICKET_DELETE_TASKS.pop(number, None)
+
+
+async def restore_join_ticket_cleanup(guild: discord.Guild):
+    """Восстановить таймеры удаления после перезапуска бота."""
+    if guild is None:
+        return
+    for number, app in storage.DATA["applications"].items():
+        if app.get("status") != "pending" and app.get("delete_at") and not app.get("channel_deleted"):
+            schedule_join_ticket_deletion(guild, number)
+
 
 def find_kind(key: str):
     key = (key or "").strip().upper()
@@ -145,8 +208,7 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
     if logs_channel:
         await logs_channel.send(embed=log_embed)
 
-    # --- Тикет: публикуем результат, закрываем заявителю доступ и переносим
-    # канал в архивную категорию вместо удаления. ---
+    # --- Тикет: публикуем результат, затем удаляем канал через 10 минут. ---
     ticket_channel = guild.get_channel(app["channel_id"])
     if ticket_channel:
         await _finalize_ticket_message(ticket_channel, app.get("ticket_message_id"), result_label, accepted)
@@ -161,7 +223,6 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
 
         if applicant is not None:
             try:
-                # Явно закрываем заявителю просмотр и отправку сообщений.
                 await ticket_channel.set_permissions(
                     applicant,
                     view_channel=False,
@@ -171,19 +232,12 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
             except discord.Forbidden:
                 logger.warning("Не удалось закрыть доступ заявителю %s к заявке %s", applicant.id, number)
 
-        archive_category_id = utils.TICKET_ARCHIVE_CATEGORIES[server]
-        archive_category = guild.get_channel(archive_category_id)
-        if archive_category is None:
-            logger.error("Архивная категория %s для %s не найдена", archive_category_id, server)
-        else:
-            try:
-                await ticket_channel.edit(
-                    category=archive_category,
-                    reason=f"Заявка {number} обработана — перенос в архив",
-                )
-                logger.info("Заявка %s перемещена в архивную категорию %s", number, archive_category.id)
-            except discord.Forbidden:
-                logger.error("Нет прав переместить канал заявки %s в архив", number)
+    # Данные заявки не удаляются. Они остаются в data/data.json.
+    from datetime import timedelta
+    app["delete_at"] = (utils.now() + timedelta(seconds=config.TICKET_DELETE_DELAY_SECONDS)).isoformat()
+    app["channel_deleted"] = False
+    await storage.persist()
+    schedule_join_ticket_deletion(guild, number)
 
     message = f"Заявка `{number}` обработана: {result_label}."
     if role_warning:
