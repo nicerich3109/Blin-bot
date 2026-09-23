@@ -26,6 +26,7 @@ from discipline import ensure_discipline_roles
 from roles_data import save_roles
 from consent_view import StandaloneConsentView
 from reaction_roles import publish_reaction_role_messages, handle_reaction_add, handle_reaction_remove
+from decisions import restore_join_ticket_cleanup
 
 intents = discord.Intents.default()
 intents.members = True
@@ -76,6 +77,11 @@ bot = BlinBot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     logger.info("Бот запущен как %s (ID: %s)", bot.user, bot.user.id)
+    for guild in bot.guilds:
+        try:
+            await restore_join_ticket_cleanup(guild)
+        except Exception:
+            logger.exception("Не удалось восстановить таймеры удаления заявок в гильдии %s", guild.id)
 
     try:
         save_roles(bot.guilds)
