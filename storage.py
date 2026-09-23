@@ -39,6 +39,9 @@ def _load() -> dict:
 
 
 def _save(data: dict) -> None:
+    data_dir = os.path.dirname(config.DATA_FILE)
+    if data_dir:
+        os.makedirs(data_dir, exist_ok=True)
     tmp_path = config.DATA_FILE + ".tmp"
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
