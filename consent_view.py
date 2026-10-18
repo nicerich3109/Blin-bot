@@ -54,11 +54,12 @@ class StandaloneConsentView(discord.ui.View):
 
 
 async def ensure_consent(interaction):
-    """Проверяет согласие перед использованием обычных функций бота."""
+    """Проверяет согласие; без него показывает предложение принять соглашение."""
     if consent_storage.has_consent(interaction.user.id):
         return True
     await interaction.response.send_message(
-        "❌ Для использования этой функции необходимо дать согласие на системные уведомления бота.",
+        CONSENT_TEXT,
+        view=StandaloneConsentView(),
         ephemeral=True,
     )
     return False
