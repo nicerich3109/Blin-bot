@@ -8,26 +8,26 @@
 После изменения файла перезапустите бота.
 
 Коды серверов:
-    DN  = Denver
-    PHX = Phoenix
+    CM  = Crime
+    ST = State
 
 Пример:
-    FAMILY_APPLICATIONS["DN"] = False   # заявки Denver отключены
-    FAMILY_APPLICATIONS["PHX"] = True   # заявки Phoenix включены
+    FAMILY_APPLICATIONS["CM"] = False   # заявки Crime отключены
+    FAMILY_APPLICATIONS["ST"] = True   # заявки State включены
 """
 
 # ========================= ЗАЯВКИ В СЕМЬЮ ================================
 
 FAMILY_APPLICATIONS = {
-    "DN": True,   # Denver
-    "PHX": True,  # Phoenix
+    "CM": True,   # Crime
+    "ST": True,  # State
 }
 
 # ============================== ОТПУСК ====================================
 
 VACATIONS = {
-    "DN": True,   # Denver
-    "PHX": True,  # Phoenix
+    "CM": True,   # Crime
+    "ST": True,  # State
 }
 
 

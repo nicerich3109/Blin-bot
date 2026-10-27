@@ -2,28 +2,28 @@
 """Настройки дополнительных функций Blin."""
 
 CONTRACT_PAYOUT_CHANNELS = {
-    "PHX": 1525206310474485901,
-    "DN": 1372517581415514173,
+    "ST": 1525206310474485901,
+    "CM": 1372517581415514173,
 }
 
 CONTRACT_PANEL_CHANNELS = {
-    "PHX": 1525152798843469884,
-    "DN": 1372267301159567579,
+    "ST": 1525152798843469884,
+    "CM": 1372267301159567579,
 }
 
 CONTRACT_PANEL_TITLES = {
-    "PHX": "Заявки на выплату с контрактов — Phoenix",
-    "DN": "Заявки на выплату с контрактов — Denver",
+    "ST": "Заявки на выплату с контрактов — State",
+    "CM": "Заявки на выплату с контрактов — Crime",
 }
 
 CONTRACT_PANEL_TEXTS = {
-    "PHX": "Выберите выполненный контракт и заполните заявку на выплату.",
-    "DN": "Выберите выполненный контракт и заполните заявку на выплату.",
+    "ST": "Выберите выполненный контракт и заполните заявку на выплату.",
+    "CM": "Выберите выполненный контракт и заполните заявку на выплату.",
 }
 
 CONTRACT_PANEL_IMAGES = {
-    "PHX": "",
-    "DN": "",
+    "ST": "",
+    "CM": "",
 }
 
 def _fields(with_quantity, quantity_placeholder="Укажите количество"):
@@ -51,7 +51,7 @@ def _options(prefix, prices, with_quantity, quantity_placeholder="Укажите
     ]
 
 CONTRACT_BUTTONS = {
-    "PHX": [
+    "ST": [
         {"key": "seafood", "label": "Дары моря", "style": "primary",
          "options": _options("Дары моря", ("1,2234", "1,2512", "0,8893", "0,7619"), True)},
         {"key": "metallurgy", "label": "Металлургия", "style": "primary",
@@ -61,7 +61,7 @@ CONTRACT_BUTTONS = {
         {"key": "atelier", "label": "Ателье", "style": "primary",
          "options": _options("Ателье", ("700", "800", "850", "900", "950"), True, "Укажите сколько одежды вы сдали")},
     ],
-    "DN": [
+    "CM": [
         {"key": "seafood", "label": "Дары моря", "style": "primary",
          "options": _options("Дары моря", ("1,2234", "1,2512", "0,8893", "0,7619"), True)},
         {"key": "metallurgy", "label": "Металлургия", "style": "primary",
@@ -73,9 +73,5 @@ CONTRACT_BUTTONS = {
     ],
 }
 
-DISCIPLINE_LOG_CHANNELS = {
-    "PHX": 1550560587224842270,
-    "DN": 1550559942480502794,
-}
 
 REACTION_ROLE_MESSAGES = {}

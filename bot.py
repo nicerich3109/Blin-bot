@@ -22,7 +22,6 @@ from vacations import (
 )
 from commands import register_commands
 from contracts import ContractPanelView, publish_contract_panel
-from discipline import ensure_discipline_roles
 from roles_data import save_roles
 from consent_view import StandaloneConsentView
 from reaction_roles import publish_reaction_role_messages, handle_reaction_add, handle_reaction_remove
@@ -38,10 +37,10 @@ class BlinBot(commands.Bot):
     async def setup_hook(self):
         self.add_view(JoinInfoView())
         self.add_view(StandaloneConsentView())
-        self.add_view(VacationInfoView("DN"))
-        self.add_view(VacationInfoView("PHX"))
-        self.add_view(ContractPanelView("DN"))
-        self.add_view(ContractPanelView("PHX"))
+        self.add_view(VacationInfoView("CM"))
+        self.add_view(VacationInfoView("ST"))
+        self.add_view(ContractPanelView("CM"))
+        self.add_view(ContractPanelView("ST"))
 
         for number, app in storage.DATA["applications"].items():
             if app.get("status") == "pending":
@@ -93,8 +92,8 @@ async def on_ready():
     # InvalidData: Guild ID resolved to a different guild.
     configured_channel_ids = {
         config.RECRUIT_INFO_CHANNEL,
-        config.VACATION_CHANNEL_DN,
-        config.VACATION_CHANNEL_PHX,
+        config.VACATION_CHANNEL_CM,
+        config.VACATION_CHANNEL_ST,
     }
 
     for guild in bot.guilds:
@@ -103,9 +102,8 @@ async def on_ready():
 
         logger.info("Инициализация сообщений Blin в гильдии %s (%s)", guild.name, guild.id)
         try:
-            await ensure_discipline_roles(guild)
-            await publish_contract_panel(guild, "DN")
-            await publish_contract_panel(guild, "PHX")
+            await publish_contract_panel(guild, "CM")
+            await publish_contract_panel(guild, "ST")
             await publish_reaction_role_messages(guild)
         except Exception:
             logger.exception("Ошибка публикации дополнительных панелей в гильдии %s", guild.id)
@@ -130,7 +128,7 @@ async def on_ready():
         else:
             logger.error("Канал заявок на вступление (ID %s) не найден в гильдии %s", config.RECRUIT_INFO_CHANNEL, guild.id)
 
-        for server in ("DN", "PHX"):
+        for server in ("CM", "ST"):
             vacation_channel_id = utils.VACATION_CHANNELS[server]
             vacation_channel = guild.get_channel(vacation_channel_id)
             if vacation_channel is None:

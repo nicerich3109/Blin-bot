@@ -23,7 +23,6 @@ import storage
 import consent_storage
 from consent_view import CONSENT_TEXT, StandaloneConsentView
 import vacations
-import discipline
 import config
 import utils
 
@@ -123,7 +122,7 @@ def register_commands(bot: commands.Bot):
         await interaction.response.send_message(embeds=embeds, ephemeral=True)
 
     @bot.tree.command(name="принять", description="Принять заявку (на вступление или отпуск)")
-    @app_commands.describe(номер="Номер заявки, например DN-001 или DN-VAC-001")
+    @app_commands.describe(номер="Номер заявки, например CM-001 или CM-VAC-001")
     @app_commands.autocomplete(номер=_autocomplete_number)
     async def cmd_accept(interaction: discord.Interaction, номер: str):
         if interaction.guild is None:
@@ -141,7 +140,7 @@ def register_commands(bot: commands.Bot):
         await interaction.followup.send(message, ephemeral=True)
 
     @bot.tree.command(name="отклонить", description="Отклонить заявку (на вступление или отпуск)")
-    @app_commands.describe(номер="Номер заявки, например DN-001 или DN-VAC-001", причина="Причина отказа")
+    @app_commands.describe(номер="Номер заявки, например CM-001 или CM-VAC-001", причина="Причина отказа")
     @app_commands.autocomplete(номер=_autocomplete_number)
     async def cmd_decline(interaction: discord.Interaction, номер: str, причина: str):
         if interaction.guild is None:
@@ -180,30 +179,5 @@ def register_commands(bot: commands.Bot):
         await interaction.response.defer(ephemeral=True, thinking=True)
         ok, message = await vacations.force_remove_vacation(
             interaction.guild, interaction.user, участник, причина
-        )
-        await interaction.followup.send(message, ephemeral=True)
-
-
-    @bot.tree.command(name="выдать_выговор", description="Выдать дисциплинарное взыскание")
-    @app_commands.describe(
-        сервер="Сервер: PHX или DN",
-        участник="Кому выдать взыскание",
-        причина="Причина взыскания",
-        отработка="Что необходимо отработать",
-    )
-    @app_commands.choices(сервер=[
-        app_commands.Choice(name="PHX", value="PHX"),
-        app_commands.Choice(name="DN", value="DN"),
-    ])
-    async def cmd_issue_warning(interaction: discord.Interaction, сервер: str, участник: discord.Member, причина: str, отработка: str):
-        if interaction.guild is None:
-            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
-            return
-        if not consent_storage.has_consent(interaction.user.id):
-            await interaction.response.send_message("❌ Сначала дайте согласие на системные уведомления бота. После этого функции бота станут доступны.", ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        ok, message = await discipline.issue_warning(
-            interaction.guild, interaction.user, участник, причина, отработка, сервер
         )
         await interaction.followup.send(message, ephemeral=True)

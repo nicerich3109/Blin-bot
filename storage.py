@@ -14,29 +14,50 @@ from logger_setup import logger
 _lock = asyncio.Lock()
 
 DEFAULT_DATA = {
-    "counters": {"DN": 0, "PHX": 0},
-    "vac_counters": {"DN": 0, "PHX": 0},
-    "applications": {},        # номер заявки ("DN-001") -> dict
-    "vacations": {},            # id заявки на отпуск ("DN-VAC-001") -> dict
+    "counters": {"CM": 0, "ST": 0},
+    "vac_counters": {"CM": 0, "ST": 0},
+    "applications": {},        # номер заявки ("CM-001") -> dict
+    "vacations": {},            # id заявки на отпуск ("CM-VAC-001") -> dict
     "persistent_messages": {},  # ключ -> message_id
     "join_cooldowns": {},       # user_id (str) -> ISO-время последней поданной заявки
     "contracts": {},           # номер заявки на выплату -> dict
 }
 
 
+def _migrate_server_labels(data: dict) -> dict:
+    """Переносит сохранённые серверные коды DN/PHX на CM/ST без потери заявок."""
+    labels = {"DN": "CM", "PHX": "ST"}
+    for counter_name in ("counters", "vac_counters"):
+        counters = data.setdefault(counter_name, {})
+        for old, new in labels.items():
+            if old in counters:
+                counters[new] = max(int(counters.get(new, 0)), int(counters.pop(old, 0)))
+    for section in ("applications", "vacations", "contracts"):
+        for item in data.setdefault(section, {}).values():
+            if item.get("server") in labels:
+                item["server"] = labels[item["server"]]
+    persistent = data.setdefault("persistent_messages", {})
+    for old, new in labels.items():
+        for key in list(persistent):
+            if f"_{old}" in key:
+                value = persistent.pop(key)
+                persistent[key.replace(f"_{old}", f"_{new}")] = value
+    return data
+
+
 def _load() -> dict:
     if not os.path.exists(config.DATA_FILE):
-        return json.loads(json.dumps(DEFAULT_DATA))
-    with open(config.DATA_FILE, "r", encoding="utf-8") as f:
-        try:
-            loaded = json.load(f)
-        except json.JSONDecodeError:
-            logger.exception("Не удалось прочитать %s, использую пустое хранилище", config.DATA_FILE)
-            loaded = {}
+        loaded = json.loads(json.dumps(DEFAULT_DATA))
+    else:
+        with open(config.DATA_FILE, "r", encoding="utf-8") as f:
+            try:
+                loaded = json.load(f)
+            except json.JSONDecodeError:
+                logger.exception("Не удалось прочитать %s, использую пустое хранилище", config.DATA_FILE)
+                loaded = {}
     for key, value in DEFAULT_DATA.items():
         loaded.setdefault(key, json.loads(json.dumps(value)))
-    return loaded
-
+    return _migrate_server_labels(loaded)
 
 def _save(data: dict) -> None:
     data_dir = os.path.dirname(config.DATA_FILE)

@@ -14,46 +14,46 @@ GUILD_ID = 1372267300366979223  # Blin Dynasty
 
 RECRUIT_INFO_CATEGORY = 1372267300408791095   # раздел с сообщением "Подать заявку" (вступление)
 RECRUIT_INFO_CHANNEL = 1372267300849320037    # канал с сообщением "Подать заявку" (вступление)
-TICKET_CATEGORY_DN = 1410973810550636544      # раздел для тикетов-заявок Denver
-TICKET_CATEGORY_PHX = 1525185739896393809     # раздел для тикетов-заявок Phoenix
-TICKET_ARCHIVE_CATEGORY_DN = 1543674967881941093   # архив заявок Denver
-TICKET_ARCHIVE_CATEGORY_PHX = 1543674852676735128  # архив заявок Phoenix
-LOGS_CHANNEL_DN = 1372271047096926278         # канал логов заявок Denver (вступление + отпуск)
-LOGS_CHANNEL_PHX = 1525206273081999542        # канал логов заявок Phoenix (вступление + отпуск)
-VACATION_CATEGORY_DN = 1372267301159567571    # раздел с заявками на отпуск Denver
-VACATION_CHANNEL_DN = 1372267301159567578     # канал с заявками на отпуск Denver
-VACATION_CATEGORY_PHX = 1525151395026833488   # раздел с заявками на отпуск Phoenix
-VACATION_CHANNEL_PHX = 1525152733601202277    # канал с заявками на отпуск Phoenix
+TICKET_CATEGORY_CM = 1410973810550636544      # раздел для тикетов-заявок Crime
+TICKET_CATEGORY_ST = 1525185739896393809     # раздел для тикетов-заявок State
+TICKET_ARCHIVE_CATEGORY_CM = 1543674967881941093   # архив заявок Crime
+TICKET_ARCHIVE_CATEGORY_ST = 1543674852676735128  # архив заявок State
+LOGS_CHANNEL_CM = 1372271047096926278         # канал логов заявок Crime (вступление + отпуск)
+LOGS_CHANNEL_ST = 1525206273081999542        # канал логов заявок State (вступление + отпуск)
+VACATION_CATEGORY_CM = 1372267301159567571    # раздел с заявками на отпуск Crime
+VACATION_CHANNEL_CM = 1372267301159567578     # канал с заявками на отпуск Crime
+VACATION_CATEGORY_ST = 1525151395026833488   # раздел с заявками на отпуск State
+VACATION_CHANNEL_ST = 1525152733601202277    # канал с заявками на отпуск State
 
 # ================================== РОЛИ =================================
 
-RECRUIT_DN = 1372267300366979230        # Recrut Blin DN
-CHIEF_RECRUIT_DN = 1410714327773745222  # Chief Recrut Blin DN
-RECRUIT_PHX = 1525147233228685353       # Recrut Blin PHX
-CHIEF_RECRUIT_PHX = 1525147059672580187 # Chief Recrut Blin PHX
-NEW_MEMBER_DN = 1372267300366979228     # роль нового участника Denver
-NEW_MEMBER_PHX = 1525147604227198976    # роль нового участника Phoenix
-JOIN_SERVER_ROLE_DN = 1543544272559808573   # роль, выдаваемая при одобрении заявки Denver
-JOIN_SERVER_ROLE_PHX = 1543543788939509791  # роль, выдаваемая при одобрении заявки Phoenix
-VACATION_ROLE_DN = 1525217493138935978  # роль "в отпуске" Denver
-VACATION_ROLE_PHX = 1525219966616600607 # роль "в отпуске" Phoenix
+RECRUIT_CM = 1372267300366979230        # Recrut Blin CM
+CHIEF_RECRUIT_CM = 1410714327773745222  # Chief Recrut Blin CM
+RECRUIT_ST = 1525147233228685353       # Recrut Blin ST
+CHIEF_RECRUIT_ST = 1525147059672580187 # Chief Recrut Blin ST
+NEW_MEMBER_CM = 1372267300366979228     # роль нового участника Crime
+NEW_MEMBER_ST = 1525147604227198976    # роль нового участника State
+JOIN_SERVER_ROLE_CM = 1543544272559808573   # роль, выдаваемая при одобрении заявки Crime
+JOIN_SERVER_ROLE_ST = 1543543788939509791  # роль, выдаваемая при одобрении заявки State
+VACATION_ROLE_CM = 1525217493138935978  # роль "в отпуске" Crime
+VACATION_ROLE_ST = 1525219966616600607 # роль "в отпуске" State
 
 # Роль, которая выдаётся заявителю после того, как его вызвали на
 # обзвон (кнопка "Обзвон" на заявке вступления). Даёт видимость канала
 # обзвона на соответствующем сервере.
-OBZVON_ROLE_DN = 1532735084405456968
-OBZVON_ROLE_PHX = 1532735239066095777
+OBZVON_ROLE_CM = 1532735084405456968
+OBZVON_ROLE_ST = 1532735239066095777
 
 # Голосовые каналы обзвона — по два на сервер. При нажатии "Обзвон"
 # сотрудник выбирает один из них, после чего заявителю выдаётся роль
 # обзвона соответствующего сервера и приходит уведомление с каналом.
-OBZVON_CHANNELS_DN = [1372935983288418364, 1425542308303994971]
-OBZVON_CHANNELS_PHX = [1525229147516047450, 1525229175865348137]
+OBZVON_CHANNELS_CM = [1372935983288418364, 1425542308303994971]
+OBZVON_CHANNELS_ST = [1525229147516047450, 1525229175865348137]
 
 # Роли, которым разрешено принимать/отклонять заявки на отпуск.
 # По умолчанию — те же рекрутёры/чиф-рекрутёры, что и по заявкам на
 # вступление. При необходимости добавьте сюда ID роли "High Staff".
-VACATION_STAFF_ROLES = [RECRUIT_DN, CHIEF_RECRUIT_DN, RECRUIT_PHX, CHIEF_RECRUIT_PHX]
+VACATION_STAFF_ROLES = [RECRUIT_CM, CHIEF_RECRUIT_CM, RECRUIT_ST, CHIEF_RECRUIT_ST]
 
 # ================================ ТЕКСТЫ ==================================
 
@@ -87,11 +87,6 @@ VACATION_TIMEZONE = "Europe/Moscow"
 # было спамить заявками. Отсчитывается с момента успешной подачи заявки.
 JOIN_APPLICATION_COOLDOWN_SECONDS = 120
 
-# ======================== ДИСЦИПЛИНА ======================================
-DISCIPLINE_LOG_CHANNELS = {
-    "PHX": 1550559942480502794,
-    "DN": 1550560587224842270,
-}
 
 # ======================== РОЛИ ПО РЕАКЦИИ/КНОПКАМ ==========================
 # mode = "reaction" или "button". Для reaction задаётся emoji -> role_id.

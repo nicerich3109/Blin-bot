@@ -4,8 +4,8 @@
 
 Изменения по ТЗ v1.1:
 - вместо текстового поля "Сервер" в модалке теперь два отдельных
-  персистентных кнопки в информационном сообщении: "Denver" (синяя) и
-  "Phoenix" (красная) — п. 2.1;
+  персистентных кнопки в информационном сообщении: "Crime" (синяя) и
+  "State" (красная) — п. 2.1;
 - из модалки убраны поля "Планы после вступления" и "Откуда узнали о
   нас" — п. 2.2. Осталось три поля: никнейм, статик, OOC возраст;
 - в тикет-канале сразу висят кнопки "Принять"/"Отклонить" — п. 5.2.
@@ -87,32 +87,32 @@ class JoinModal(discord.ui.Modal):
 
 
 class JoinInfoView(discord.ui.View):
-    """Персистентные кнопки "Denver" / "Phoenix" под информационным текстом."""
+    """Персистентные кнопки "Crime" / "State" под информационным текстом."""
 
     def __init__(self):
         super().__init__(timeout=None)
 
-        denver_btn = discord.ui.Button(
-            label="Denver",
+        crime_btn = discord.ui.Button(
+            label="Crime",
             style=discord.ButtonStyle.primary,  # синяя
-            custom_id="join_apply_dn",
+            custom_id="join_apply_cm",
         )
-        phoenix_btn = discord.ui.Button(
-            label="Phoenix",
+        state_btn = discord.ui.Button(
+            label="State",
             style=discord.ButtonStyle.danger,  # красная
-            custom_id="join_apply_phx",
+            custom_id="join_apply_st",
         )
-        denver_btn.disabled = not feature_flags.is_family_enabled("DN")
-        phoenix_btn.disabled = not feature_flags.is_family_enabled("PHX")
-        denver_btn.callback = self.on_denver
-        phoenix_btn.callback = self.on_phoenix
-        self.add_item(denver_btn)
-        self.add_item(phoenix_btn)
+        crime_btn.disabled = not feature_flags.is_family_enabled("CM")
+        state_btn.disabled = not feature_flags.is_family_enabled("ST")
+        crime_btn.callback = self.on_crime
+        state_btn.callback = self.on_state
+        self.add_item(crime_btn)
+        self.add_item(state_btn)
 
-    async def on_denver(self, interaction: discord.Interaction):
-        if not feature_flags.is_family_enabled("DN"):
+    async def on_crime(self, interaction: discord.Interaction):
+        if not feature_flags.is_family_enabled("CM"):
             await interaction.response.send_message(
-                "❌ Подача заявок в семью на сервер Denver сейчас отключена.",
+                "❌ Подача заявок в семью на сервер Crime сейчас отключена.",
                 ephemeral=True,
             )
             return
@@ -126,18 +126,18 @@ class JoinInfoView(discord.ui.View):
             )
             return
         if consent_storage.has_consent(interaction.user.id):
-            await interaction.response.send_modal(JoinModal("DN"))
+            await interaction.response.send_modal(JoinModal("CM"))
         else:
             await interaction.response.send_message(
                 CONSENT_TEXT,
-                view=ConsentView(lambda: JoinModal("DN")),
+                view=ConsentView(lambda: JoinModal("CM")),
                 ephemeral=True,
             )
 
-    async def on_phoenix(self, interaction: discord.Interaction):
-        if not feature_flags.is_family_enabled("PHX"):
+    async def on_state(self, interaction: discord.Interaction):
+        if not feature_flags.is_family_enabled("ST"):
             await interaction.response.send_message(
-                "❌ Подача заявок в семью на сервер Phoenix сейчас отключена.",
+                "❌ Подача заявок в семью на сервер State сейчас отключена.",
                 ephemeral=True,
             )
             return
@@ -151,11 +151,11 @@ class JoinInfoView(discord.ui.View):
             )
             return
         if consent_storage.has_consent(interaction.user.id):
-            await interaction.response.send_modal(JoinModal("PHX"))
+            await interaction.response.send_modal(JoinModal("ST"))
         else:
             await interaction.response.send_message(
                 CONSENT_TEXT,
-                view=ConsentView(lambda: JoinModal("PHX")),
+                view=ConsentView(lambda: JoinModal("ST")),
                 ephemeral=True,
             )
 
