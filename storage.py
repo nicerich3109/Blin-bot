@@ -13,6 +13,10 @@ from logger_setup import logger
 
 _lock = asyncio.Lock()
 
+# На PHX было создано 170 заявок до переименования сервера в ST.
+# Не позволяем счётчику заявок ST опуститься ниже этого значения.
+ST_LEGACY_APPLICATIONS = 170
+
 DEFAULT_DATA = {
     "counters": {"CM": 0, "ST": 0},
     "vac_counters": {"CM": 0, "ST": 0},
@@ -32,6 +36,11 @@ def _migrate_server_labels(data: dict) -> dict:
         for old, new in labels.items():
             if old in counters:
                 counters[new] = max(int(counters.get(new, 0)), int(counters.pop(old, 0)))
+
+    # Даже если старый счётчик PHX потерян, не начинаем нумерацию ST с 001.
+    counters = data.setdefault("counters", {})
+    counters["ST"] = max(int(counters.get("ST", 0)), ST_LEGACY_APPLICATIONS)
+
     for section in ("applications", "vacations", "contracts"):
         for item in data.setdefault(section, {}).values():
             if item.get("server") in labels:
