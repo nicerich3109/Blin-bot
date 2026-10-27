@@ -114,7 +114,7 @@ async def on_ready():
         if recruit_channel is not None:
             try:
                 embed = discord.Embed(
-                    title="Вступление в компанию",
+                    title="Вступление в семью",
                     description=config.RECRUIT_INFO_TEXT,
                     color=discord.Color.blurple(),
                 )
