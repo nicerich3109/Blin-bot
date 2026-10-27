@@ -94,12 +94,12 @@ class JoinInfoView(discord.ui.View):
 
         crime_btn = discord.ui.Button(
             label="Crime",
-            style=discord.ButtonStyle.primary,  # синяя
+            style=discord.ButtonStyle.danger,  # красная
             custom_id="join_apply_cm",
         )
         state_btn = discord.ui.Button(
             label="State",
-            style=discord.ButtonStyle.danger,  # красная
+            style=discord.ButtonStyle.primary,  # синяя
             custom_id="join_apply_st",
         )
         crime_btn.disabled = not feature_flags.is_family_enabled("CM")
