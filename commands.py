@@ -25,6 +25,7 @@ from consent_view import CONSENT_TEXT, StandaloneConsentView
 import vacations
 import config
 import utils
+import restore_applications
 
 
 async def _autocomplete_number(interaction: discord.Interaction, current: str):
@@ -181,3 +182,25 @@ def register_commands(bot: commands.Bot):
             interaction.guild, interaction.user, участник, причина
         )
         await interaction.followup.send(message, ephemeral=True)
+
+
+    @bot.tree.command(name="восстановить_заявки", description="Восстановить отсутствующие заявки из логов")
+    @app_commands.default_permissions(administrator=True)
+    async def cmd_restore_applications(interaction: discord.Interaction):
+        if interaction.guild is None:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Команда доступна только администраторам.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            added, existing, _ = await restore_applications.restore_from_logs(bot)
+        except Exception as exc:
+            await interaction.followup.send(f"❌ Не удалось восстановить заявки: {exc}", ephemeral=True)
+            return
+        await interaction.followup.send(
+            f"✅ Проверка завершена. Добавлено: State — {added['ST']}, Crime — {added['CM']}. "
+            f"Уже были в data.json: State — {existing['ST']}, Crime — {existing['CM']}.",
+            ephemeral=True,
+        )
