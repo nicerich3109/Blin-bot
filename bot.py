@@ -44,7 +44,7 @@ class BlinBot(commands.Bot):
 
         for number, app in storage.DATA["applications"].items():
             if app.get("status") == "pending":
-                self.add_view(RequestDecisionView("join", number))
+                self.add_view(RequestDecisionView("friend" if app.get("type") == "friend" else "join", number))
 
         for vac_id, vac in storage.DATA["vacations"].items():
             if vac.get("status") == "pending":
