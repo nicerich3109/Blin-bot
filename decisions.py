@@ -17,6 +17,7 @@ import consent_storage
 from logger_setup import logger
 
 KIND_JOIN = "join"
+KIND_FRIEND = "friend"
 KIND_VACATION = "vacation"
 KIND_CONTRACT = "contract"
 
@@ -87,7 +88,8 @@ async def restore_join_ticket_cleanup(guild: discord.Guild):
 def find_kind(key: str):
     key = (key or "").strip().upper()
     if key in storage.DATA["applications"]:
-        return KIND_JOIN, key
+        app = storage.DATA["applications"][key]
+        return (KIND_FRIEND if app.get("type") == "friend" else KIND_JOIN), key
     if key in storage.DATA["vacations"]:
         return KIND_VACATION, key
     if key in storage.DATA["contracts"]:
@@ -97,7 +99,7 @@ def find_kind(key: str):
 
 async def decide_request(guild: discord.Guild, staff_member: discord.Member,
                           kind: str, key: str, accepted: bool, reason: str = None):
-    if kind == KIND_JOIN:
+    if kind in (KIND_JOIN, KIND_FRIEND):
         return await _decide_join(guild, staff_member, key, accepted, reason)
     if kind == KIND_VACATION:
         return await _decide_vacation(guild, staff_member, key, accepted, reason)
