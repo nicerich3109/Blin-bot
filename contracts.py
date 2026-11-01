@@ -66,7 +66,20 @@ class ContractModal(discord.ui.Modal):
         embed.add_field(name="Заявитель",value=f"{interaction.user.mention} ({interaction.user.id})",inline=False)
         for label,value in values.items(): embed.add_field(name=label[:256],value=value[:1024] or "—",inline=False)
         embed.add_field(name="Сервер",value=utils.SERVER_NAMES[self.server],inline=True)
-        msg=await channel.send(embed=embed,view=RequestDecisionView("contract",number))
+        if self.server == "ST":
+            notify_role_ids = (1525248468405453031, 1525147163313573928, 1525147059672580187)
+            mentions = " ".join(f"<@&{role_id}>" for role_id in notify_role_ids)
+            allowed_mentions = discord.AllowedMentions(
+                everyone=False, users=False, roles=[discord.Object(id=role_id) for role_id in notify_role_ids]
+            )
+            msg=await channel.send(
+                content=mentions,
+                embed=embed,
+                view=RequestDecisionView("contract",number),
+                allowed_mentions=allowed_mentions,
+            )
+        else:
+            msg=await channel.send(embed=embed,view=RequestDecisionView("contract",number))
         storage.DATA["contracts"][number]={
             "server":self.server,
             "requester_id":interaction.user.id,
