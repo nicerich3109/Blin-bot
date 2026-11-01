@@ -106,8 +106,11 @@ class JoinInfoView(discord.ui.View):
         state_btn.disabled = not feature_flags.is_family_enabled("ST")
         crime_btn.callback = self.on_crime
         state_btn.callback = self.on_state
+        friend_btn = discord.ui.Button(label="Друг", style=discord.ButtonStyle.secondary, custom_id="join_apply_friend")
+        friend_btn.callback = self.on_friend
         self.add_item(crime_btn)
         self.add_item(state_btn)
+        self.add_item(friend_btn)
 
     async def on_crime(self, interaction: discord.Interaction):
         if not feature_flags.is_family_enabled("CM"):
@@ -133,6 +136,92 @@ class JoinInfoView(discord.ui.View):
                 view=ConsentView(lambda: JoinModal("CM")),
                 ephemeral=True,
             )
+
+
+    async def on_friend(self, interaction: discord.Interaction):
+        if not consent_storage.has_consent(interaction.user.id):
+            await interaction.response.send_message(
+                CONSENT_TEXT, view=ConsentView(lambda: FriendModal()), ephemeral=True
+            )
+            return
+        await interaction.response.send_modal(FriendModal())
+
+
+class FriendModal(discord.ui.Modal):
+    nickname = discord.ui.TextInput(label="Ник", max_length=100)
+    family = discord.ui.TextInput(
+        label="От какой семьи", max_length=100,
+        placeholder="Укажите семью, от которой подаёте заявку",
+    )
+
+    def __init__(self):
+        super().__init__(title="Заявка «Друг» — State")
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        number = storage.next_friend_number()
+        guild = interaction.guild
+        category = guild.get_channel(config.FRIEND_TICKET_CATEGORY_ST)
+        if category is None:
+            await interaction.followup.send(
+                "❌ Не найден раздел для заявок «Друг». Сообщите администрации.",
+                ephemeral=True,
+            )
+            return
+
+        recruit_id, chief_id = utils.RECRUIT_ROLES["ST"]
+        recruit_role = guild.get_role(recruit_id)
+        chief_role = guild.get_role(chief_id)
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            ),
+            guild.me: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_channels=True
+            ),
+        }
+        for role in (recruit_role, chief_role):
+            if role:
+                overwrites[role] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, read_message_history=True
+                )
+
+        channel = await category.create_text_channel(
+            name=number, overwrites=overwrites, reason=f"Заявка «Друг» {number}"
+        )
+        embed = discord.Embed(
+            title=f"Заявка «Друг» {number}",
+            color=discord.Color.from_rgb(150, 105, 65),
+        )
+        embed.add_field(name="Ник", value=str(self.nickname.value), inline=False)
+        embed.add_field(name="От какой семьи", value=str(self.family.value), inline=False)
+        embed.add_field(name="Тип заявки", value="Друг", inline=True)
+        embed.add_field(name="Сервер", value="State", inline=True)
+        embed.set_footer(text=f"Discord: {interaction.user} ({interaction.user.id})")
+
+        pings = interaction.user.mention
+        if recruit_role:
+            pings += f" {recruit_role.mention}"
+        if chief_role:
+            pings += f" {chief_role.mention}"
+        ticket_message = await channel.send(
+            content=pings, embed=embed, view=RequestDecisionView("join", number)
+        )
+        storage.DATA["applications"][number] = {
+            "type": "friend", "server": "ST",
+            "applicant_id": interaction.user.id,
+            "channel_id": channel.id, "ticket_message_id": ticket_message.id,
+            "status": "pending", "nickname": str(self.nickname.value),
+            "family": str(self.family.value),
+        }
+        await storage.persist()
+        logger.info("Создана заявка «Друг» %s от %s", number, interaction.user.id)
+        await interaction.followup.send(
+            f"Заявка {number} отправлена. Ожидайте ответа в канале {channel.mention}.",
+            ephemeral=True,
+        )
+
 
     async def on_state(self, interaction: discord.Interaction):
         if not feature_flags.is_family_enabled("ST"):
