@@ -147,6 +147,31 @@ class JoinInfoView(discord.ui.View):
         await interaction.response.send_modal(FriendModal())
 
 
+    async def on_state(self, interaction: discord.Interaction):
+        if not feature_flags.is_family_enabled("ST"):
+            await interaction.response.send_message(
+                "❌ Подача заявок в семью на сервер State сейчас отключена.",
+                ephemeral=True,
+            )
+            return
+        remaining = _cooldown_remaining(interaction.user.id)
+        if remaining > 0:
+            await interaction.response.send_message(
+                f"⏳ Подавать заявку можно не чаще раза в "
+                f"{config.JOIN_APPLICATION_COOLDOWN_SECONDS // 60} мин. "
+                f"Попробуйте снова через {int(remaining)} сек.",
+                ephemeral=True,
+            )
+            return
+        if consent_storage.has_consent(interaction.user.id):
+            await interaction.response.send_modal(JoinModal("ST"))
+        else:
+            await interaction.response.send_message(
+                CONSENT_TEXT,
+                view=ConsentView(lambda: JoinModal("ST")),
+                ephemeral=True,
+            )
+
 class FriendModal(discord.ui.Modal):
     nickname = discord.ui.TextInput(label="Ник", max_length=100)
     family = discord.ui.TextInput(
@@ -222,31 +247,6 @@ class FriendModal(discord.ui.Modal):
             ephemeral=True,
         )
 
-
-    async def on_state(self, interaction: discord.Interaction):
-        if not feature_flags.is_family_enabled("ST"):
-            await interaction.response.send_message(
-                "❌ Подача заявок в семью на сервер State сейчас отключена.",
-                ephemeral=True,
-            )
-            return
-        remaining = _cooldown_remaining(interaction.user.id)
-        if remaining > 0:
-            await interaction.response.send_message(
-                f"⏳ Подавать заявку можно не чаще раза в "
-                f"{config.JOIN_APPLICATION_COOLDOWN_SECONDS // 60} мин. "
-                f"Попробуйте снова через {int(remaining)} сек.",
-                ephemeral=True,
-            )
-            return
-        if consent_storage.has_consent(interaction.user.id):
-            await interaction.response.send_modal(JoinModal("ST"))
-        else:
-            await interaction.response.send_message(
-                CONSENT_TEXT,
-                view=ConsentView(lambda: JoinModal("ST")),
-                ephemeral=True,
-            )
 
 
 def _cooldown_remaining(user_id) -> float:
