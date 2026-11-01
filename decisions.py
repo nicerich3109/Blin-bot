@@ -135,7 +135,7 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
     applicant = await utils.get_member_safe(guild, app["applicant_id"])
     if applicant is None:
         logger.warning("Заявитель %s заявки %s не найден на сервере", app["applicant_id"], number)
-    elif consent_storage.has_consent(app["applicant_id"]):
+    elif not is_friend and consent_storage.has_consent(app["applicant_id"]):
         try:
             label = "заявка «Друг»" if is_friend else f"заявка в {utils.SERVER_NAMES[server]}"
             if accepted:
@@ -148,7 +148,34 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
         except discord.HTTPException:
             logger.warning("Не удалось отправить уведомление по заявке %s", number)
 
-    # Заявка «Друг» не меняет ник и не выдаёт роли нового участника.
+    # Для заявки «Друг» выдаём отдельную роль и устанавливаем ник из анкеты.
+    if accepted and applicant is not None and is_friend:
+        friend_nickname = str(app.get("nickname", "")).strip()
+        try:
+            await applicant.edit(
+                nick=f"Друг | {friend_nickname}",
+                reason=f"Заявка «Друг» {number} одобрена",
+            )
+        except discord.Forbidden:
+            logger.error("Нет прав изменить ник участнику %s (заявка %s)", applicant.id, number)
+            role_warning = "не удалось изменить ник (проверьте иерархию ролей бота)"
+        friend_role = guild.get_role(config.FRIEND_ROLE_ST)
+        if friend_role is None:
+            logger.error("Роль «Друг» %s не найдена на сервере %s", config.FRIEND_ROLE_ST, guild.id)
+            role_warning = "роль «Друг» не найдена в config.py/на сервере"
+        else:
+            try:
+                await applicant.add_roles(
+                    friend_role, reason=f"Заявка «Друг» {number} одобрена"
+                )
+            except discord.Forbidden:
+                logger.error(
+                    "Нет прав выдать роль «Друг» %s участнику %s (заявка %s)",
+                    friend_role.id, applicant.id, number,
+                )
+                role_warning = "не удалось выдать роль «Друг» (проверьте иерархию ролей бота)"
+
+    # Обычные заявки на вступление обрабатываются без изменений.
     if accepted and applicant is not None and not is_friend:
         first_word = app["nickname"].strip().split(" ")[0] if app["nickname"].strip() else applicant.display_name
         try:
