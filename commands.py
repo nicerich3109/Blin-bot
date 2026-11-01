@@ -34,7 +34,7 @@ async def _autocomplete_number(interaction: discord.Interaction, current: str):
 
     for number, app in storage.DATA["applications"].items():
         if app["status"] == "pending" and current in number:
-            choices.append(app_commands.Choice(name=f"{number} (вступление)", value=number))
+            choices.append(app_commands.Choice(name=f"{number} ({'Друг' if app.get('type') == 'friend' else 'вступление'})", value=number))
 
     for vac_id, vac in storage.DATA["vacations"].items():
         if vac["status"] == "pending" and current in vac_id:
