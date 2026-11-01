@@ -106,7 +106,7 @@ class JoinInfoView(discord.ui.View):
         state_btn.disabled = not feature_flags.is_family_enabled("ST")
         crime_btn.callback = self.on_crime
         state_btn.callback = self.on_state
-        friend_btn = discord.ui.Button(label="Друг", style=discord.ButtonStyle.secondary, custom_id="join_apply_friend")
+        friend_btn = discord.ui.Button(label="Друг", emoji="🟤", style=discord.ButtonStyle.secondary, custom_id="join_apply_friend")
         friend_btn.callback = self.on_friend
         self.add_item(crime_btn)
         self.add_item(state_btn)
