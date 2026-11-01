@@ -16,6 +16,7 @@ RECRUIT_INFO_CATEGORY = 1372267300408791095   # раздел с сообщени
 RECRUIT_INFO_CHANNEL = 1372267300849320037    # канал с сообщением "Подать заявку" (вступление)
 TICKET_CATEGORY_CM = 1410973810550636544      # раздел для тикетов-заявок Crime
 TICKET_CATEGORY_ST = 1525185739896393809     # раздел для тикетов-заявок State
+FRIEND_TICKET_CATEGORY_ST = 1525185739896393809  # раздел заявок «Друг» State
 TICKET_ARCHIVE_CATEGORY_CM = 1543674967881941093   # архив заявок Crime
 TICKET_ARCHIVE_CATEGORY_ST = 1543674852676735128  # архив заявок State
 LOGS_CHANNEL_CM = 1372271047096926278         # канал логов заявок Crime (вступление + отпуск)
