@@ -18,7 +18,7 @@ _lock = asyncio.Lock()
 ST_LEGACY_APPLICATIONS = 170
 
 DEFAULT_DATA = {
-    "counters": {"CM": 0, "ST": 0},
+    "counters": {"CM": 0, "ST": 0, "FR": 0},
     "vac_counters": {"CM": 0, "ST": 0},
     "applications": {},        # номер заявки ("CM-001") -> dict
     "vacations": {},            # id заявки на отпуск ("CM-VAC-001") -> dict
@@ -89,6 +89,13 @@ async def persist() -> None:
 def next_ticket_number(server: str) -> str:
     DATA["counters"][server] += 1
     return f"{server}-{DATA['counters'][server]:03d}"
+
+
+def next_friend_number() -> str:
+    """Номер заявки «Друг»: FR-001, FR-002 и т. д."""
+    DATA["counters"].setdefault("FR", 0)
+    DATA["counters"]["FR"] += 1
+    return f"FR-{DATA['counters']['FR']:03d}"
 
 
 def next_vacation_id(server: str) -> str:
