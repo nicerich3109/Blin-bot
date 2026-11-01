@@ -139,11 +139,7 @@ class JoinInfoView(discord.ui.View):
 
 
     async def on_friend(self, interaction: discord.Interaction):
-        if not consent_storage.has_consent(interaction.user.id):
-            await interaction.response.send_message(
-                CONSENT_TEXT, view=ConsentView(lambda: FriendModal()), ephemeral=True
-            )
-            return
+        # Для заявок «Друг» согласие на уведомления не запрашивается.
         await interaction.response.send_modal(FriendModal())
 
 
@@ -233,6 +229,9 @@ class FriendModal(discord.ui.Modal):
         ticket_message = await channel.send(
             content=pings, embed=embed, view=RequestDecisionView("friend", number)
         )
+        # Заявители «Друг» не получают системные ЛС — сохраняем отказ
+        # от уведомлений в consents.json независимо от прежнего согласия.
+        await consent_storage.set_consent(interaction.user.id, False)
         storage.DATA["applications"][number] = {
             "type": "friend", "server": "ST",
             "applicant_id": interaction.user.id,
