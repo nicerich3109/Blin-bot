@@ -111,57 +111,49 @@ async def decide_request(guild: discord.Guild, staff_member: discord.Member,
 async def _decide_join(guild, staff_member, number, accepted, reason):
     app = storage.DATA["applications"].get(number)
     if app is None:
-        return False, f"Заявка `{number}` не найдена."
+        return False, f"Заявка {number} не найдена."
     if app["status"] != "pending":
-        return False, f"Заявка `{number}` уже обработана (статус: {app['status']})."
+        return False, f"Заявка {number} уже обработана (статус: {app['status']})."
 
     server = app["server"]
     if not utils.is_recruiter(staff_member, server):
         return False, "У вас нет прав обрабатывать заявки этого сервера."
 
+    is_friend = app.get("type") == "friend"
     app["status"] = "accepted" if accepted else "declined"
     app["decided_by"] = staff_member.id
     if reason:
         app["decline_reason"] = reason
     await storage.persist()
 
-    logger.info(
-        "Заявка на вступление %s обработана (%s) сотрудником %s",
-        number, app["status"], staff_member.id,
-    )
-
+    logger.info("Заявка %s (%s) обработана сотрудником %s", number,
+                "Друг" if is_friend else "вступление", staff_member.id)
     result_label = "✅ Принята" if accepted else "❌ Отклонена"
     role_warning = None
-
     applicant = await utils.get_member_safe(guild, app["applicant_id"])
     if applicant is None:
         logger.warning("Заявитель %s заявки %s не найден на сервере", app["applicant_id"], number)
     elif consent_storage.has_consent(app["applicant_id"]):
         try:
+            label = "заявка «Друг»" if is_friend else f"заявка в {utils.SERVER_NAMES[server]}"
             if accepted:
-                await applicant.send(
-                    f"✅ Ваша заявка {number} в {utils.SERVER_NAMES[server]} принята сотрудником {staff_member.mention}."
-                )
+                await applicant.send(f"✅ Ваша {label} {number} принята сотрудником {staff_member.mention}.")
             else:
                 await applicant.send(
-                    f"❌ Ваша заявка {number} в {utils.SERVER_NAMES[server]} отклонена {staff_member.mention}. "
+                    f"❌ Ваша {label} {number} отклонена {staff_member.mention}. "
                     f"Причина: {reason or 'не указана'}"
                 )
         except discord.HTTPException:
             logger.warning("Не удалось отправить уведомление по заявке %s", number)
 
-    # --- Действия по заявителю при одобрении ---
-    if accepted and applicant is not None:
+    # Заявка «Друг» не меняет ник и не выдаёт роли нового участника.
+    if accepted and applicant is not None and not is_friend:
         first_word = app["nickname"].strip().split(" ")[0] if app["nickname"].strip() else applicant.display_name
-        new_nick = f"New | {server} | {first_word}"
         try:
-            await applicant.edit(nick=new_nick, reason=f"Заявка {number} одобрена")
+            await applicant.edit(nick=f"New | {server} | {first_word}", reason=f"Заявка {number} одобрена")
         except discord.Forbidden:
             logger.error("Нет прав изменить ник участнику %s (заявка %s)", applicant.id, number)
             role_warning = "не удалось изменить ник (проверьте иерархию ролей бота)"
-
-        # Сохраняем существующую роль нового участника и дополнительно
-        # выдаём роль сервера, указанную в ТЗ.
         for role_id in (utils.NEW_MEMBER_ROLES[server], utils.JOIN_SERVER_ROLES[server]):
             role = guild.get_role(role_id)
             if role is None:
@@ -170,49 +162,43 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
                 continue
             try:
                 await applicant.add_roles(role, reason=f"Заявка {number} одобрена")
-                logger.info("Роль %s выдана участнику %s (заявка %s)", role.id, applicant.id, number)
             except discord.Forbidden:
                 logger.error("Нет прав выдать роль %s участнику %s (заявка %s)", role.id, applicant.id, number)
                 role_warning = "не удалось выдать одну из ролей (проверьте иерархию ролей бота)"
 
-    # --- Снимаем роль обзвона после обработки заявки ---
-    if applicant is not None:
+    if applicant is not None and not is_friend:
         obzvon_role_id = utils.OBZVON_ROLES.get(server)
         obzvon_role = guild.get_role(obzvon_role_id) if obzvon_role_id else None
         if obzvon_role and obzvon_role in applicant.roles:
             try:
                 await applicant.remove_roles(obzvon_role, reason=f"Заявка {number} обработана")
             except discord.Forbidden:
-                logger.error(
-                    "Нет прав снять роль обзвона %s с участника %s (заявка %s)",
-                    obzvon_role.id, applicant.id, number,
-                )
+                logger.error("Нет прав снять роль обзвона %s с участника %s (заявка %s)",
+                             obzvon_role.id, applicant.id, number)
 
-    # --- Логи ---
     logs_channel = guild.get_channel(utils.LOGS_CHANNELS[server])
     log_embed = discord.Embed(
-        title=f"Заявка {number} — {result_label}",
+        title=f"{'Заявка «Друг»' if is_friend else 'Заявка'} {number} — {result_label}",
         color=discord.Color.green() if accepted else discord.Color.red(),
     )
-    log_embed.add_field(name="Никнейм", value=app["nickname"], inline=False)
-    log_embed.add_field(name="Статик #", value=app["static"], inline=True)
-    log_embed.add_field(name="OOC возраст", value=app["ooc_age"], inline=True)
-    log_embed.add_field(name="Сервер", value=utils.SERVER_NAMES[server], inline=True)
-    log_embed.add_field(
-        name="Заявитель", value=f"<@{app['applicant_id']}> ({app['applicant_id']})", inline=False
-    )
+    if is_friend:
+        log_embed.add_field(name="Ник", value=app.get("nickname", "—"), inline=False)
+        log_embed.add_field(name="От какой семьи", value=app.get("family", "—"), inline=False)
+    else:
+        log_embed.add_field(name="Никнейм", value=app["nickname"], inline=False)
+        log_embed.add_field(name="Статик #", value=app["static"], inline=True)
+        log_embed.add_field(name="OOC возраст", value=app["ooc_age"], inline=True)
+        log_embed.add_field(name="Сервер", value=utils.SERVER_NAMES[server], inline=True)
+    log_embed.add_field(name="Заявитель", value=f"<@{app['applicant_id']}> ({app['applicant_id']})", inline=False)
     log_embed.add_field(name="Обработал", value=staff_member.mention, inline=True)
     if not accepted and reason:
         log_embed.add_field(name="Причина отказа", value=reason, inline=False)
-
     if logs_channel:
         await logs_channel.send(embed=log_embed)
 
-    # --- Тикет: публикуем результат, затем удаляем канал через 10 минут. ---
     ticket_channel = guild.get_channel(app["channel_id"])
     if ticket_channel:
         await _finalize_ticket_message(ticket_channel, app.get("ticket_message_id"), result_label, accepted)
-
         result_embed = discord.Embed(
             title=f"Заявка {result_label}",
             color=discord.Color.green() if accepted else discord.Color.red(),
@@ -220,30 +206,24 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
         if not accepted and reason:
             result_embed.description = f"Причина: {reason}"
         await ticket_channel.send(embed=result_embed)
-
         if applicant is not None:
             try:
                 await ticket_channel.set_permissions(
-                    applicant,
-                    view_channel=False,
-                    send_messages=False,
-                    read_message_history=False,
+                    applicant, view_channel=False, send_messages=False, read_message_history=False
                 )
             except discord.Forbidden:
                 logger.warning("Не удалось закрыть доступ заявителю %s к заявке %s", applicant.id, number)
 
-    # Данные заявки не удаляются. Они остаются в data/data.json.
     from datetime import timedelta
     app["delete_at"] = (utils.now() + timedelta(seconds=config.TICKET_DELETE_DELAY_SECONDS)).isoformat()
     app["channel_deleted"] = False
     await storage.persist()
     schedule_join_ticket_deletion(guild, number)
 
-    message = f"Заявка `{number}` обработана: {result_label}."
+    message = f"Заявка {number} обработана: {result_label}."
     if role_warning:
         message += f" Внимание: {role_warning}. Подробности в bot.log."
     return True, message
-
 
 async def _finalize_ticket_message(channel, message_id, result_label, accepted):
     if not message_id:
