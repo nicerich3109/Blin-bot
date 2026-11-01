@@ -231,7 +231,7 @@ class FriendModal(discord.ui.Modal):
         if chief_role:
             pings += f" {chief_role.mention}"
         ticket_message = await channel.send(
-            content=pings, embed=embed, view=RequestDecisionView("join", number)
+            content=pings, embed=embed, view=RequestDecisionView("friend", number)
         )
         storage.DATA["applications"][number] = {
             "type": "friend", "server": "ST",
