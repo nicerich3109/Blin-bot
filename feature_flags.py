@@ -32,10 +32,10 @@ VACATIONS = {
 CONTRACT_LEVELS = {
     "ST": {
         "seafood": {
-            "seafood_i": True,
-            "seafood_ii": True,
-            "seafood_iii": True,
-            "seafood_iv": True,
+            "дары_моря_i": True,
+            "дары_моря_ii": True,
+            "дары_моря_iii": True,
+            "дары_моря_iv": True,
         },
         "metallurgy": {
             "metallurgy_i": True,
@@ -59,10 +59,10 @@ CONTRACT_LEVELS = {
     },
     "CM": {
         "seafood": {
-            "seafood_i": True,
-            "seafood_ii": True,
-            "seafood_iii": True,
-            "seafood_iv": True,
+            "дары_моря_i": True,
+            "дары_моря_ii": True,
+            "дары_моря_iii": True,
+            "дары_моря_iv": True,
         },
         "metallurgy": {
             "metallurgy_i": True,
