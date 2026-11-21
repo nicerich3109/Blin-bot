@@ -3,28 +3,52 @@
 import discord
 import config, storage, utils
 import bot_features_config as feature_config
+import feature_flags
 from logger_setup import logger
 from consent_view import ensure_consent
 from ui_decision import RequestDecisionView
 
+
+def _enabled_options(server, key):
+    """Возвращает только открытые уровни выбранного контракта."""
+    item = next((i for i in feature_config.CONTRACT_BUTTONS.get(server, []) if i["key"] == key), None)
+    if item is None:
+        return []
+    return [
+        option for option in item.get("options", [])
+        if feature_flags.is_contract_level_enabled(server, key, str(option.get("value", "")))
+    ]
+
+
 class ContractOptionSelect(discord.ui.Select):
     def __init__(self,server,key):
         self.server,self.key=server,key
-        item=next(i for i in feature_config.CONTRACT_BUTTONS[server] if i["key"]==key)
-        options=item["options"][:10]
+        options=_enabled_options(server, key)[:10]
         super().__init__(placeholder="Выберите опцию из меню:",options=[
             discord.SelectOption(label=str(o["label"])[:100],value=str(o["value"])[:100],
                                  description=str(o.get("description",""))[:100] or None) for o in options])
     async def callback(self,interaction):
         if not await ensure_consent(interaction):
             return
+        # Повторная проверка нужна на случай, если уровень закрыли,
+        # пока пользователь держал открытое меню.
         item=next(i for i in feature_config.CONTRACT_BUTTONS[self.server] if i["key"]==self.key)
-        option=next(o for o in item["options"] if str(o["value"])==self.values[0])
+        option=next((o for o in item["options"]
+                     if str(o["value"])==self.values[0]
+                     and feature_flags.is_contract_level_enabled(self.server, self.key, str(o["value"]))), None)
+        if option is None:
+            await interaction.response.send_message(
+                "❌ Этот уровень контракта сейчас закрыт. Откройте меню заново.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.send_modal(ContractModal(self.server,self.key,option))
+
 
 class ContractOptionView(discord.ui.View):
     def __init__(self,server,key):
         super().__init__(timeout=120); self.add_item(ContractOptionSelect(server,key))
+
 
 class ContractModal(discord.ui.Modal):
     def __init__(self,server,key,option):
@@ -38,6 +62,12 @@ class ContractModal(discord.ui.Modal):
             setattr(self,f"field_{i}",item); self.add_item(item)
     async def on_submit(self,interaction):
         if not await ensure_consent(interaction):
+            return
+        if not feature_flags.is_contract_level_enabled(self.server, self.key, str(self.option.get("value", ""))):
+            await interaction.response.send_message(
+                "❌ Этот уровень контракта был закрыт до отправки заявки.",
+                ephemeral=True,
+            )
             return
         values={}
         for i,field in enumerate(self.option.get("fields",[])[:5]):
@@ -93,19 +123,29 @@ class ContractModal(discord.ui.Modal):
         await storage.persist()
         await interaction.response.send_message(f"Заявка {number} отправлена на рассмотрение.",ephemeral=True)
 
+
 class ContractPanelButton(discord.ui.Button):
     def __init__(self,server,key,item):
-        super().__init__(label=item["label"][:80],style=getattr(discord.ButtonStyle,item.get("style","primary"),discord.ButtonStyle.primary),custom_id=f"contract_panel_{server}_{key}")
+        available = bool(_enabled_options(server, key))
+        super().__init__(label=item["label"][:80],
+            style=getattr(discord.ButtonStyle,item.get("style","primary"),discord.ButtonStyle.primary),
+            custom_id=f"contract_panel_{server}_{key}", disabled=not available)
         self.server,self.key=server,key
     async def callback(self,interaction):
         if not await ensure_consent(interaction):
             return
+        if not _enabled_options(self.server, self.key):
+            await interaction.response.send_message("❌ Сейчас все уровни этого контракта закрыты.",ephemeral=True)
+            return
         await interaction.response.send_message("Выберите опцию из меню:",view=ContractOptionView(self.server,self.key),ephemeral=True)
+
 
 class ContractPanelView(discord.ui.View):
     def __init__(self,server):
         super().__init__(timeout=None)
-        for item in feature_config.CONTRACT_BUTTONS[server][:20]: self.add_item(ContractPanelButton(server,item["key"],item))
+        for item in feature_config.CONTRACT_BUTTONS[server][:20]:
+            self.add_item(ContractPanelButton(server,item["key"],item))
+
 
 async def publish_contract_panel(guild,server):
     channel=guild.get_channel(feature_config.CONTRACT_PANEL_CHANNELS[server])
