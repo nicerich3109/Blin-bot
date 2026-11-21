@@ -5,6 +5,7 @@
 
 import asyncio
 import math
+import re
 from decimal import Decimal, InvalidOperation
 
 import discord
@@ -254,6 +255,7 @@ async def _decide_join(guild, staff_member, number, accepted, reason):
         message += f" Внимание: {role_warning}. Подробности в bot.log."
     return True, message
 
+
 async def _finalize_ticket_message(channel, message_id, result_label, accepted):
     if not message_id:
         return
@@ -390,6 +392,22 @@ async def _finalize_vacation_log_message(guild, vac, vac_id, result_label, accep
 
 # ============================== КОНТРАКТЫ ================================
 
+def _parse_contract_price(price_text):
+    """
+    Разбирает цену контракта.
+
+    В конфигурации запятая с тремя цифрами справа означает разделитель
+    тысяч (например, 20,000 -> 20000), а запятая с четырьмя цифрами —
+    десятичный разделитель (например, 1,2234 -> 1.2234).
+    """
+    raw = str(price_text).strip().replace(" ", "").replace("\u00a0", "")
+    if re.fullmatch(r"\d{1,3}(?:,\d{3})+", raw):
+        raw = raw.replace(",", "")
+    else:
+        raw = raw.replace(",", ".")
+    return Decimal(raw)
+
+
 def _contract_payout(item):
     """Возвращает (целая выплата, количество, цена за единицу)."""
     option = str(item.get("option", ""))
@@ -401,13 +419,12 @@ def _contract_payout(item):
         return 0, 0, Decimal("0")
 
     try:
-        unit_price = Decimal(str(price_text).replace(" ", "").replace(",", "."))
-    except InvalidOperation:
+        unit_price = _parse_contract_price(price_text)
+    except (InvalidOperation, ValueError):
         return 0, 0, Decimal("0")
 
     quantity = item.get("quantity")
     if quantity is None:
-        # Старые заявки: количество есть только у контрактов с поштучной оплатой.
         quantity = 1
 
     try:
@@ -420,7 +437,6 @@ def _contract_payout(item):
 
     payout = math.floor(unit_price * quantity)
     return payout, quantity, unit_price
-
 
 
 async def _decide_contract(guild, staff_member, number, accepted, reason):
